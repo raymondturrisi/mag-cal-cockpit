@@ -1,0 +1,1186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mag Cal Cockpit</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three/lines/Line2":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/Line2.js","three/lines/LineMaterial":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/LineMaterial.js","three/lines/LineGeometry":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/LineGeometry.js"}}</script>
+<style>
+:root{--bg:#0d0d0d;--pnl:#181818;--bdr:#2a2a2a;--txt:#c0c0c0;--dim:#5a5a5a;--grn:#2ecc71;--org:#e67e22;--red:#e74c3c;--blu:#4a9eff;--acc:#ff6b6b;--mag:#e040fb;--raw-c:#e74c3c;--rls-c:#4a9eff;--lm-c:#2ecc71}
+html.light{--bg:#f2f2f2;--pnl:#fff;--bdr:#ddd;--txt:#222;--dim:#888}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--txt);font-family:'Inter','SF Pro Text',system-ui,sans-serif;font-size:12px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.topbar{display:flex;align-items:center;padding:0 12px;background:var(--pnl);border-bottom:1px solid var(--bdr);height:34px;gap:8px;flex-shrink:0}
+.topbar h1{font-size:13px;font-weight:800;color:var(--acc);letter-spacing:1px}
+.sep{width:1px;height:18px;background:var(--bdr)}
+.badges{display:flex;gap:4px}.badge{padding:1px 6px;border-radius:2px;background:var(--bg);border:1px solid var(--bdr);font-size:9px;font-weight:700;font-family:'SF Mono','Consolas',monospace}
+.badge.on{background:var(--grn);color:#000;border-color:var(--grn)}.badge.warn{background:var(--org);color:#000;border-color:var(--org)}
+.btns{display:flex;gap:3px}.btn{padding:2px 9px;border:1px solid var(--bdr);border-radius:2px;cursor:pointer;font-size:9px;font-weight:700;font-family:inherit;background:var(--bg);color:var(--dim)}
+.btn:hover{background:var(--bdr);color:var(--txt)}.btn-g{border-color:var(--grn);color:var(--grn)}.btn-o{border-color:var(--org);color:var(--org)}.btn-r{border-color:var(--red);color:var(--red)}.btn-b{border-color:var(--blu);color:var(--blu)}
+.topbar label{color:var(--dim);font-size:9px;display:flex;align-items:center;gap:3px;font-family:'SF Mono',monospace}
+.topbar input[type=range]{width:50px;accent-color:var(--blu)}.spacer{flex:1}
+.thm{cursor:pointer;font-size:15px;padding:1px 5px;background:none;border:1px solid var(--bdr);border-radius:2px;color:var(--dim)}
+.tabbar{display:flex;padding:0 12px;background:var(--pnl);border-bottom:1px solid var(--bdr);height:26px;flex-shrink:0}
+.tab{padding:4px 14px;cursor:pointer;font-size:10px;font-weight:600;color:var(--dim);border-bottom:2px solid transparent}.tab.active{color:var(--acc);border-bottom-color:var(--acc)}
+.content{flex:1;min-height:0;position:relative}.page{position:absolute;inset:0;display:none}.page.active{display:block}
+.g32{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;width:100%;height:100%}
+.cal-grid-custom{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:3fr 1.2fr 2fr;width:100%;height:100%;grid-template-areas:"raw rls lm" "mfi mfi mfi" "hist hist dash"}
+.g22{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;width:100%;height:100%}
+.cell{position:relative;background:var(--pnl);border:1px solid var(--bdr);overflow:hidden}
+.cell canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
+.cl{position:absolute;top:0;left:0;right:0;padding:2px 6px;font-size:8px;font-weight:700;color:var(--dim);background:rgba(0,0,0,0.55);z-index:5;pointer-events:none;letter-spacing:.4px;text-transform:uppercase;font-family:'SF Mono',monospace}
+html.light .cl{background:rgba(255,255,255,0.7)}
+.rb{position:absolute;top:2px;right:4px;z-index:10;background:var(--pnl);border:1px solid var(--bdr);color:var(--dim);font-size:11px;width:18px;height:18px;line-height:16px;text-align:center;border-radius:2px;cursor:pointer}.rb:hover{color:var(--txt);background:var(--bdr)}.icell{display:flex;flex-direction:column}.itop{flex:1;min-height:0;overflow-y:auto;padding:6px 8px}
+.itop table{width:100%;border-collapse:collapse}.itop td{padding:1px 0}
+.itop .k{color:var(--dim);font-weight:600;width:75px;font-family:'SF Mono','Consolas',monospace;font-size:10px;vertical-align:top}
+.itop .v{font-family:'SF Mono','Consolas',monospace;font-size:10px;font-weight:600;color:var(--txt)}
+.itop .v.g{color:var(--grn)}.itop .v.o{color:var(--org)}.itop .v.r{color:var(--red)}
+.itop hr{border:none;border-top:1px solid var(--bdr);margin:5px 0}
+.si-matrix{font-family:'SF Mono','Consolas',monospace;font-size:9px;font-weight:600;color:var(--txt);line-height:1.4;margin:1px 0}
+.si-matrix .row{white-space:nowrap}
+.qbar{height:5px;background:var(--bg);border-radius:2px;margin:3px 0}.qbar .fill{height:100%;border-radius:2px;transition:width .3s}
+#co{white-space:pre-wrap;font-family:'SF Mono',monospace;font-size:9px;color:var(--dim);margin-top:4px;line-height:1.4}
+.lgd{display:flex;gap:10px;margin:2px 0;font-size:9px;font-weight:600}.lgd span{display:flex;align-items:center;gap:3px}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.diag-grid .cell{display:flex;flex-direction:column}.diag-grid .plot{flex:1;min-height:0}
+/* Region editor */
+#region-bar{height:36px;background:var(--bg);border-top:1px solid var(--bdr);position:relative;user-select:none}
+.region-seg{position:absolute;top:6px;height:24px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;cursor:pointer;transition:all 0.15s;font-family:'SF Mono',monospace;overflow:hidden}
+.region-seg.on{background:rgba(46,204,113,0.2);color:var(--grn);border:1px solid rgba(46,204,113,0.4)}
+.region-seg.off{background:rgba(231,76,60,0.12);color:var(--red);border:1px solid rgba(231,76,60,0.3);opacity:0.5}
+.region-seg:hover{opacity:1;filter:brightness(1.2)}
+.region-marker{position:absolute;top:0;width:14px;height:36px;cursor:col-resize;z-index:3;display:flex;align-items:center;justify-content:center;margin-left:-7px}
+.region-marker .marker-line{width:2px;height:100%;background:var(--mag)}
+.region-marker .marker-label{position:absolute;top:-1px;font-size:7px;color:var(--mag);font-family:'SF Mono',monospace;font-weight:700;pointer-events:none}
+.region-marker:hover .marker-line{width:3px;background:#fff}
+.region-marker.fixed{cursor:default}
+.region-marker.fixed .marker-line{background:var(--dim)}
+.region-marker.fixed .marker-label{color:var(--dim)}
+/* Animate */
+.anim-wrap{display:flex;flex-direction:column;height:100%}
+.anim-top{flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0}
+.anim-top .cell{position:relative}
+.anim-ctrl{display:flex;align-items:center;gap:8px;padding:5px 14px 20px 14px;background:var(--pnl);border-top:1px solid var(--bdr);flex-shrink:0}
+.anim-ctrl button{padding:2px 10px;border:1px solid var(--bdr);border-radius:2px;cursor:pointer;font-size:10px;font-weight:700;font-family:inherit;background:var(--bg);color:var(--dim)}
+.anim-ctrl input[type=range]{flex:1;accent-color:var(--blu)}
+.anim-ctrl .tl{font-family:'SF Mono',monospace;font-size:10px;color:var(--dim);min-width:40px;text-align:center}
+</style>
+</head>
+<body>
+<div class="topbar">
+    <h1>MAG CAL</h1><div class="sep"></div>
+    <div class="badges"><span class="badge" id="sc">DISCONNECTED</span><span class="badge" id="sl">IDLE</span><span class="badge" id="sn">0</span><span class="badge" id="sm">STILL</span></div>
+    <div class="sep"></div>
+    <div class="btns"><button class="btn btn-g" id="bs" onclick="doStart()">START</button><button class="btn btn-o" id="bp" onclick="doPause()" style="display:none">PAUSE</button><button class="btn btn-g" id="br" onclick="doResume()" style="display:none">RESUME</button><button class="btn btn-r" onclick="doReset()">RESET</button><button class="btn btn-b" onclick="doCal()">CALIBRATE</button><button class="btn" onclick="doExport()" style="border-color:var(--dim);color:var(--dim)">EXPORT</button></div>
+    <div class="sep"></div>
+    <label>Gyro Motion Gating <span id="tv">2.9</span> °/s<input type="range" min="0.01" max="0.20" step="0.01" value="0.05" oninput="setTh(this.value)"></label>
+    <div class="sep"></div>
+    <label>Method
+        <select id="method-sel" onchange="setMethod(this.value)" style="background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:2px;font-size:9px;font-family:inherit;padding:1px 4px">
+            <option value="lm">LM</option>
+            <option value="lse">LSE</option>
+        </select>
+    </label>
+    <label>Mag Units
+        <select id="unit-sel" onchange="setUnit(this.value)" style="background:var(--bg);color:var(--txt);border:1px solid var(--bdr);border-radius:2px;font-size:9px;font-family:inherit;padding:1px 4px">
+            <option value="gauss">Gauss</option>
+            <option value="ut">µT</option>
+            <option value="nt">nT</option>
+        </select>
+    </label>
+    <div class="spacer"></div><button class="thm" onclick="toggleTheme()">&#9681;</button>
+</div>
+<div class="tabbar">
+    <div class="tab active" onclick="switchTab(0)">Calibration</div>
+    <div class="tab" onclick="switchTab(1)">Diagnostics</div>
+    <div class="tab" onclick="switchTab(2)">Animate</div>
+    <div class="tab" onclick="switchTab(3)">Inspect</div>
+</div>
+<div class="content">
+    <!-- TAB 0: Calibration — top: Raw / RLS / LM spheres, bottom: histogram (2 cols) + dashboard -->
+    <div class="page active" id="page0"><div class="cal-grid-custom">
+        <div class="cell" style="grid-area:raw"><div class="cl" id="lb0">Raw Data</div><canvas id="c0"></canvas><button class="rb" onclick="resetCam(0)">&#8634;</button></div>
+        <div class="cell" style="grid-area:rls"><div class="cl">RLS Calibrated (live)</div><canvas id="c1"></canvas><button class="rb" onclick="resetCam(1)">&#8634;</button></div>
+        <div class="cell" style="grid-area:lm"><div class="cl" id="cal-sphere-label">LM Calibrated</div><canvas id="c2"></canvas><button class="rb" onclick="resetCam(2)">&#8634;</button></div>
+        <!-- MFI magnitude + region editor -->
+        <div class="cell" style="grid-area:mfi;display:flex;flex-direction:column">
+            <div class="cl" style="display:flex;justify-content:space-between;align-items:center">
+                <span>Field Magnitude &amp; Region Editor</span>
+                <span style="display:flex;gap:4px;pointer-events:auto">
+                    <button class="rb" id="mfi-raw-btn" onclick="toggleMfiTrace(0)" style="position:static;width:auto;height:auto;padding:1px 6px;font-size:8px;border-color:var(--raw-c);color:var(--raw-c)">Raw</button>
+                    <button class="rb" id="mfi-rls-btn" onclick="toggleMfiTrace(1)" style="position:static;width:auto;height:auto;padding:1px 6px;font-size:8px;border-color:var(--rls-c);color:var(--rls-c)">RLS</button>
+                    <button class="rb" id="mfi-lm-btn" onclick="toggleMfiTrace(2)" style="position:static;width:auto;height:auto;padding:1px 6px;font-size:8px;border-color:var(--lm-c);color:var(--lm-c)">LM</button>
+                    <span style="width:1px;height:12px;background:var(--bdr)"></span>
+                    <label style="font-size:8px;color:var(--txt);display:flex;align-items:center;gap:2px">Roll &le;<span id="rp-roll-val">180</span>°<input type="range" min="5" max="180" value="180" step="5" style="width:40px;accent-color:var(--blu)" oninput="setRPFilter(this,'roll')"></label>
+                    <label style="font-size:8px;color:var(--txt);display:flex;align-items:center;gap:2px">Pitch &le;<span id="rp-pitch-val">90</span>°<input type="range" min="5" max="90" value="90" step="5" style="width:40px;accent-color:var(--blu)" oninput="setRPFilter(this,'pitch')"></label>
+                    <span style="width:1px;height:12px;background:var(--bdr)"></span>
+                    <button class="rb" onclick="addSplitAtCenter()" style="position:static;width:auto;height:auto;padding:1px 6px;font-size:8px">+ Split</button>
+                    <button class="rb" onclick="removeLastSplit()" style="position:static;width:auto;height:auto;padding:1px 6px;font-size:8px">- Split</button>
+                </span>
+            </div>
+            <div id="mfi-plot" style="flex:1;min-height:0"></div>
+            <div id="region-bar"></div>
+        </div>
+        <div class="cell" style="grid-area:hist"><div class="cl">EMFI Error Distribution</div><div id="hist" style="width:100%;height:100%"></div></div>
+        <div class="cell icell" style="grid-area:dash">
+            <div class="itop">
+                <div class="lgd"><span><span class="dot" style="background:var(--raw-c)"></span>Raw</span><span><span class="dot" style="background:var(--rls-c)"></span>RLS</span><span><span class="dot" style="background:var(--lm-c)"></span><span id="method-label">LM</span></span></div>
+                <div class="lgd"><span><span class="dot" style="background:#2ecc71"></span>&lt;1%</span><span><span class="dot" style="background:#e67e22"></span>1-5%</span><span><span class="dot" style="background:#e74c3c"></span>&gt;5%</span></div>
+                <hr>
+                <table>
+                    <tr><td class="k">EMFI</td><td class="v" id="de">0.5127 G</td></tr>
+                    <tr><td class="k">Inclination</td><td class="v" id="di">66.23°</td></tr>
+                    <tr><td class="k">Declination</td><td class="v" id="dd">-13.77°</td></tr>
+                </table>
+                <hr>
+                <table>
+                    <tr><td class="k">Hard Iron</td><td class="v" id="dh">--</td></tr>
+                </table>
+                <div style="padding-left:2px">
+                    <div style="font-size:10px;font-weight:600;color:var(--dim);font-family:'SF Mono',monospace">Soft Iron</div>
+                    <div class="si-matrix" id="dsi">
+                        <div class="row">[ --  --  -- ]</div>
+                        <div class="row">[ --  --  -- ]</div>
+                        <div class="row">[ --  --  -- ]</div>
+                    </div>
+                </div>
+                <hr>
+                <table>
+                    <tr><td class="k">Mean |B|</td><td class="v" id="dm">--</td></tr>
+                    <tr><td class="k">Std |B|</td><td class="v" id="ds">--</td></tr>
+                    <tr><td class="k">Relative Std</td><td class="v" id="dr">--</td></tr>
+                </table>
+                <div class="qbar"><div class="fill" id="qf" style="width:0;background:var(--red)"></div></div>
+                <table>
+                    <tr><td class="k">Within ±1%</td><td class="v" id="ep1">--</td></tr>
+                    <tr><td class="k">Within ±2%</td><td class="v" id="ep2">--</td></tr>
+                    <tr><td class="k">Within ±5%</td><td class="v" id="ep5">--</td></tr>
+                </table>
+                <div id="co"></div>
+            </div>
+        </div>
+    </div></div>
+    <!-- TAB 1: Diagnostics -->
+    <div class="page" id="page1"><div class="g22 diag-grid">
+        <div class="cell"><div class="cl">RP-Comp XY — No Filter</div><div id="xy0" class="plot"></div></div>
+        <div class="cell"><div class="cl">RP-Comp XY — RP &le; 20°</div><div id="xy1" class="plot"></div></div>
+        <div class="cell"><div class="cl">Inclination vs Radius Error</div><div id="ir0" class="plot"></div></div>
+        <div class="cell"><div class="cl">Incl/Radius — RP &le; 20°</div><div id="ir1" class="plot"></div></div>
+    </div></div>
+    <!-- TAB 2: Animate -->
+    <div class="page" id="page2"><div class="anim-wrap">
+        <div class="anim-top">
+            <div class="cell"><div class="cl">Sphere Transition</div><canvas id="ca0"></canvas><button class="rb" onclick="resetCam(3)">&#8634;</button></div>
+            <div class="cell"><div class="cl">RP-Comp Ring Transition</div><canvas id="ca1"></canvas><button class="rb" onclick="resetCam(4)">&#8634;</button></div>
+        </div>
+        <div class="anim-ctrl">
+            <button onclick="animPlay()">&#9654;</button><button onclick="animPause()">&#10074;&#10074;</button>
+            <div id="anim-phase" style="min-width:80px;font-family:'SF Mono',monospace;font-size:10px;font-weight:700;color:var(--txt)">--</div>
+            <div style="flex:1;position:relative;padding-bottom:16px">
+                <input type="range" id="aslider" min="0" max="1000" value="0" style="width:100%" oninput="animSeek(this.value/10)">
+                <div style="position:absolute;bottom:0;left:0;right:0;pointer-events:none;font-family:'SF Mono',monospace;font-size:9px;font-weight:700">
+                    <span style="position:absolute;left:0;color:var(--raw-c)">0% Raw</span>
+                    <span id="anim-mid-mark" style="position:absolute;left:50%;transform:translateX(-50%);color:var(--rls-c);display:none">50% LSE</span>
+                    <span id="anim-end-mark" style="position:absolute;right:0;color:var(--lm-c);text-align:right">100% LSE</span>
+                </div>
+                <div id="anim-mid-tick" style="position:absolute;top:0;left:50%;width:2px;height:18px;background:var(--rls-c);pointer-events:none;display:none;opacity:0.6"></div>
+            </div>
+        </div>
+    </div></div>
+    <!-- TAB 3: Precision Inspection -->
+    <div class="page" id="page3">
+        <div style="display:flex;width:100%;height:100%">
+            <div style="flex:1;display:flex;flex-direction:column">
+                <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:0">
+                    <div class="cell"><div class="cl">Calibrated Sphere</div><canvas id="cinsp"></canvas><button class="rb" onclick="resetCam(5)">&#8634;</button></div>
+                    <div class="cell"><div class="cl">RP-Comp Ring</div><canvas id="cinsp_ring"></canvas><button class="rb" onclick="resetCam(6)">&#8634;</button></div>
+                </div>
+            </div>
+            <div style="width:220px;background:var(--pnl);border-left:1px solid var(--bdr);padding:10px;overflow-y:auto;font-family:'SF Mono','Consolas',monospace;font-size:10px">
+                <div style="font-weight:700;color:var(--txt);margin-bottom:6px">Point Inspector</div>
+                <hr style="border:none;border-top:1px solid var(--bdr);margin:5px 0">
+                <table style="width:100%;border-collapse:collapse">
+                    <tr><td style="color:var(--dim);padding:2px 0">Time</td><td style="color:var(--txt);font-weight:600" id="insp-time">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">Roll</td><td style="color:var(--txt);font-weight:600" id="insp-roll">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">Pitch</td><td style="color:var(--txt);font-weight:600" id="insp-pitch">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">Raw |B|</td><td style="color:var(--txt);font-weight:600" id="insp-rawmag">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">Cal |B|</td><td style="color:var(--txt);font-weight:600" id="insp-calmag">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">EMFI Error</td><td style="font-weight:700" id="insp-err">--</td></tr>
+                    <tr><td style="color:var(--dim);padding:2px 0">Index</td><td style="color:var(--dim);font-weight:600" id="insp-idx">--</td></tr>
+                </table>
+                <hr style="border:none;border-top:1px solid var(--bdr);margin:5px 0">
+                <div style="color:var(--dim);font-size:8px">Hover over points to inspect.<br>Color: green &lt;1%, orange 1-5%, red &gt;5%.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {Line2} from 'three/lines/Line2';
+import {LineMaterial} from 'three/lines/LineMaterial';
+import {LineGeometry} from 'three/lines/LineGeometry';
+
+let isDark=true, EMFI=0.5127, ws, hasMount=false, isLogging=false, started=false;
+const WS_URL=`ws://${location.hostname}:${location.port}/ws`;
+const rawPts=[];
+let mountRoll=0,mountPitch=0,mountYaw=0;
+
+// Anim state
+let animRawSphere=null, animLseSphere=null, animCalSphere=null;
+let animPauseCount=0, animPauseUsed=false;
+let animRawRing=null, animLseRing=null, animCalRing=null;
+let animT=0, animPlaying=false;
+
+// Error color: <1% green, 1-5% orange, >5% red
+function errCol(absErr){
+    if(absErr<1) return new THREE.Color(0.18,0.80,0.44);
+    if(absErr<5) return new THREE.Color(0.90,0.49,0.13);
+    return new THREE.Color(0.91,0.30,0.24);
+}
+function rawErrCol(err){
+    const t=Math.max(-5,Math.min(5,err))/5;
+    if(t<0){const s=-t;return new THREE.Color(.18*(1-s)+.1*s,.8*(1-s)+.3*s,.44*(1-s)+1*s);}
+    else{const s=t;return new THREE.Color(.18*(1-s)+.9*s,.8*(1-s)+.2*s,.44*(1-s)+.1*s);}
+}
+function calColorFn(pt){
+    const mag=Math.sqrt(pt[0]**2+pt[1]**2+pt[2]**2);
+    return errCol(Math.abs((mag-EMFI)/EMFI*100));
+}
+
+// Text sprite
+function mkLabel(text,color,pos,scale){
+    const c=document.createElement('canvas');c.width=128;c.height=48;
+    const ctx=c.getContext('2d');ctx.font='bold 28px SF Mono, Consolas, monospace';
+    ctx.fillStyle=color;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,64,24);
+    const tex=new THREE.CanvasTexture(c);tex.minFilter=THREE.LinearFilter;
+    const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false});
+    const s=new THREE.Sprite(mat);s.position.copy(pos);s.scale.set(scale*.5,scale*.25,1);s.renderOrder=1000;return s;
+}
+
+// 3D ring using Line2 for actual thick lines (linewidth works on all platforms)
+function mk3DRing(r,z,n,color,widthPx){
+    const positions=[];
+    for(let i=0;i<=n;i++){const th=2*Math.PI*i/n;positions.push(r*Math.cos(th),r*Math.sin(th),z);}
+    const geo=new LineGeometry();geo.setPositions(positions);
+    const mat=new LineMaterial({color,linewidth:widthPx||4,depthTest:false,transparent:true,opacity:0.8,worldUnits:false});
+    mat.resolution.set(window.innerWidth,window.innerHeight);
+    const line=new Line2(geo,mat);line.computeLineDistances();line.renderOrder=998;
+    return line;
+}
+
+// Update Line2 resolutions when window resizes
+function updateLineResolutions(){
+    const w=window.innerWidth,h=window.innerHeight;
+    for(const sc of scenes)sc.traverse(obj=>{if(obj.material&&obj.material.isLineMaterial)obj.material.resolution.set(w,h);});
+}
+
+// NED→Three.js display transform.
+// Three.js: +X right, +Y up, +Z towards viewer.
+// We want NED displayed as: X forward (into screen), Y right, Z down.
+//   NED-X → Three.js -Z (into screen)
+//   NED-Y → Three.js +X (right)
+//   NED-Z → Three.js -Y (down)
+// Rotation matrix columns are where NED basis vectors land in Three.js:
+//   NED-X col: (0, 0, -1)
+//   NED-Y col: (1, 0,  0)
+//   NED-Z col: (0, -1, 0)
+const NED_MAT = new THREE.Matrix4().set(
+    0,  1,  0, 0,   // Three.js X = NED-Y
+    0,  0, -1, 0,   // Three.js Y = -NED-Z
+   -1,  0,  0, 0,   // Three.js Z = -NED-X
+    0,  0,  0, 1
+);
+const NED_ROT = new THREE.Quaternion().setFromRotationMatrix(NED_MAT);
+
+// ---------------------------------------------------------------------------
+// Three.js — 6 viewports: Raw(0), RLS(1), LVM(2), Frame(3), AnimSphere(4), AnimRing(5)
+// ---------------------------------------------------------------------------
+const renderers=[],scenes=[],cameras=[],ctrls=[];
+const vehAxes=[];
+const clouds={raw:null,rls:null,lm:null,animSphere:null,animRing:null,inspect:null,inspRing:null};
+let rlsRPRing=null; // live RP-compensated ring on RLS view
+
+// Camera positions in Three.js coords (post NED transform).
+// NED-X→-Z, NED-Y→+X, NED-Z→-Y.
+// 3/4 iso from behind-right-above: NED(-1.3, 0.8, -0.8) → Three.js(0.8, 0.8, 1.3)
+const defPos=[
+    new THREE.Vector3(0.8, 0.8, 1.3),  // raw iso
+    new THREE.Vector3(0.8, 0.8, 1.3),  // rls iso
+    new THREE.Vector3(0.8, 0.8, 1.3),  // lm iso
+    new THREE.Vector3(0.8, 0.8, 1.3),  // anim sphere
+    new THREE.Vector3(0.8, 0.8, 1.3),  // anim ring
+    new THREE.Vector3(0.8, 0.8, 1.3),  // inspect sphere
+    new THREE.Vector3(0.8, 0.8, 1.3),  // inspect ring
+];
+
+function mkScene(cid,idx,opts){
+    const canvas=document.getElementById(cid);
+    const r=new THREE.WebGLRenderer({canvas,antialias:true});
+    r.setPixelRatio(Math.min(devicePixelRatio,2));r.setClearColor(0x0d0d0d);
+    renderers.push(r);
+    const sc=new THREE.Scene();scenes.push(sc);
+
+    // Camera with Y-up (Three.js default, but our NED root rotation handles the mapping)
+    const cam=new THREE.PerspectiveCamera(40,1,.001,100);
+    cam.position.copy(defPos[idx]);cam.up.set(0,1,0);cam.lookAt(0,0,0);cameras.push(cam);
+    const ctrl=new OrbitControls(cam,canvas);ctrl.enableDamping=true;ctrl.dampingFactor=.12;ctrl.saveState();ctrls.push(ctrl);
+
+    // Root group with NED transform — everything goes in here
+    const nedRoot=new THREE.Group();
+    nedRoot.quaternion.copy(NED_ROT);
+    sc.add(nedRoot);
+
+    // Ideal sphere
+    if(opts?.sphere!==false){
+        const sg=new THREE.SphereGeometry(EMFI,48,32);
+        const sm=new THREE.MeshBasicMaterial({color:0x5577dd,wireframe:true,transparent:true,opacity:.22,depthTest:false});
+        const smesh=new THREE.Mesh(sg,sm);smesh.renderOrder=999;nedRoot.add(smesh);
+    }
+
+    // Static inclination ring
+    if(opts?.ring){
+        const ringR=EMFI*Math.cos(66.27*Math.PI/180), ringZ=EMFI*Math.sin(66.27*Math.PI/180);
+        nedRoot.add(mk3DRing(ringR,ringZ,200,0xe040fb,5));
+    }
+
+    // NED vehicle axes with labels
+    if(opts?.axes!==false){
+        const ag=new THREE.Group();const al=EMFI*.5;
+        ag.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0),new THREE.Vector3(),al,0xff4444,al*.13,al*.07));
+        ag.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0),new THREE.Vector3(),al,0x44ff44,al*.13,al*.07));
+        ag.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(),al,0x4488ff,al*.13,al*.07));
+        const lo=al*1.15;
+        ag.add(mkLabel('X (Fwd)','#ff6666',new THREE.Vector3(lo,0,0),al));
+        ag.add(mkLabel('Y (Stbd)','#66ff66',new THREE.Vector3(0,lo,0),al));
+        ag.add(mkLabel('Z (Down)','#6699ff',new THREE.Vector3(0,0,lo),al));
+        nedRoot.add(ag);vehAxes.push(ag);
+    }
+
+    // Point cloud
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));
+    geo.setAttribute('color',new THREE.Float32BufferAttribute([],3));
+    const mat=new THREE.PointsMaterial({size:2.5,sizeAttenuation:false,vertexColors:true});
+    const pointsMesh=new THREE.Points(geo,mat);
+    nedRoot.add(pointsMesh);
+
+    return{geo,nedRoot,pointsMesh};
+}
+
+function initThree(){
+    clouds.raw=mkScene('c0',0,{});
+    const rlsResult=mkScene('c1',1,{});
+    clouds.rls=rlsResult;
+    // Live RP ring on RLS scene — bold magenta, 6px wide
+    rlsRPRing=mk3DRing(0.01,0,200,0xe040fb,6);
+    rlsResult.nedRoot.add(rlsRPRing);
+
+    clouds.lm=mkScene('c2',2,{});
+    clouds.animSphere=mkScene('ca0',3,{});
+    clouds.animRing=mkScene('ca1',4,{sphere:false,ring:true,axes:true});
+    clouds.inspect=mkScene('cinsp',5,{});
+    clouds.inspRing=mkScene('cinsp_ring',6,{sphere:false,ring:true,axes:true});
+}
+
+// ---------------------------------------------------------------------------
+// Precision Inspection — raycaster hover on inspect tab
+// ---------------------------------------------------------------------------
+let inspectMeta = null;  // {time[], roll_deg[], pitch_deg[], raw_mag[], cal_mag[], cal_err_pct[]}
+let inspectHighlight = null;  // small sphere mesh for highlight
+const inspRaycaster = new THREE.Raycaster();
+inspRaycaster.params.Points.threshold = 0.015;
+const inspMouse = new THREE.Vector2();
+let inspHoveredIdx = -1;
+
+function setupInspect(){
+    // Highlight sphere — added to inspect scene's nedRoot
+    const hGeo = new THREE.SphereGeometry(0.008, 8, 6);
+    const hMat = new THREE.MeshBasicMaterial({color:0xffffff, depthTest:false, transparent:true, opacity:0.9});
+    inspectHighlight = new THREE.Mesh(hGeo, hMat);
+    inspectHighlight.renderOrder = 1000;
+    inspectHighlight.visible = false;
+    clouds.inspect.nedRoot.add(inspectHighlight);
+
+    const canvas = document.getElementById('cinsp');
+    canvas.addEventListener('mousemove', (e) => {
+        if(!clouds.inspect.pointsMesh.geometry.attributes.position) return;
+        const rect = canvas.getBoundingClientRect();
+        inspMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        inspMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+        inspRaycaster.setFromCamera(inspMouse, cameras[5]);
+
+        // Raycast against the points mesh (in world space, includes NED transform)
+        const intersects = inspRaycaster.intersectObject(clouds.inspect.pointsMesh);
+        if(intersects.length > 0){
+            const idx = intersects[0].index;
+            if(idx !== inspHoveredIdx){
+                inspHoveredIdx = idx;
+                // Position highlight at the intersected point (NED coords)
+                const pos = clouds.inspect.pointsMesh.geometry.attributes.position;
+                inspectHighlight.position.set(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+                inspectHighlight.visible = true;
+
+                // Update stats panel
+                if(inspectMeta){
+                    el('insp-time').textContent = inspectMeta.time[idx]?.toFixed(2) + ' s';
+                    el('insp-roll').textContent = inspectMeta.roll_deg[idx]?.toFixed(1) + '°';
+                    el('insp-pitch').textContent = inspectMeta.pitch_deg[idx]?.toFixed(1) + '°';
+                    el('insp-rawmag').textContent = inspectMeta.raw_mag[idx]?.toFixed(4);
+                    el('insp-calmag').textContent = inspectMeta.cal_mag[idx]?.toFixed(4);
+                    const err = inspectMeta.cal_err_pct[idx];
+                    const errEl = el('insp-err');
+                    errEl.textContent = (err>=0?'+':'') + err?.toFixed(2) + '%';
+                    errEl.style.color = Math.abs(err)<1?'var(--grn)':Math.abs(err)<5?'var(--org)':'var(--red)';
+                    el('insp-idx').textContent = idx + ' / ' + inspectMeta.time.length;
+                }
+            }
+        } else {
+            inspectHighlight.visible = false;
+            inspHoveredIdx = -1;
+        }
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+        inspectHighlight.visible = false;
+        inspHoveredIdx = -1;
+    });
+
+    // Ring canvas — same raycaster logic, separate camera (index 6)
+    const ringHighlight = new THREE.Mesh(
+        new THREE.SphereGeometry(0.008, 8, 6),
+        new THREE.MeshBasicMaterial({color:0xffffff, depthTest:false, transparent:true, opacity:0.9})
+    );
+    ringHighlight.renderOrder = 1000;
+    ringHighlight.visible = false;
+    clouds.inspRing.nedRoot.add(ringHighlight);
+
+    const ringCanvas = document.getElementById('cinsp_ring');
+    const ringMouse = new THREE.Vector2();
+
+    function updateStats(idx){
+        if(!inspectMeta || idx < 0) return;
+        el('insp-time').textContent = inspectMeta.time[idx]?.toFixed(2) + ' s';
+        el('insp-roll').textContent = inspectMeta.roll_deg[idx]?.toFixed(1) + '°';
+        el('insp-pitch').textContent = inspectMeta.pitch_deg[idx]?.toFixed(1) + '°';
+        el('insp-rawmag').textContent = inspectMeta.raw_mag[idx]?.toFixed(4);
+        el('insp-calmag').textContent = inspectMeta.cal_mag[idx]?.toFixed(4);
+        const err = inspectMeta.cal_err_pct[idx];
+        const errEl = el('insp-err');
+        errEl.textContent = (err>=0?'+':'') + err?.toFixed(2) + '%';
+        errEl.style.color = Math.abs(err)<1?'var(--grn)':Math.abs(err)<5?'var(--org)':'var(--red)';
+        el('insp-idx').textContent = idx + ' / ' + inspectMeta.time.length;
+    }
+
+    ringCanvas.addEventListener('mousemove', (e) => {
+        if(!clouds.inspRing.pointsMesh.geometry.attributes.position) return;
+        const rect = ringCanvas.getBoundingClientRect();
+        ringMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        ringMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        inspRaycaster.setFromCamera(ringMouse, cameras[6]);
+        const hits = inspRaycaster.intersectObject(clouds.inspRing.pointsMesh);
+        if(hits.length > 0){
+            const idx = hits[0].index;
+            const pos = clouds.inspRing.pointsMesh.geometry.attributes.position;
+            ringHighlight.position.set(pos.getX(idx), pos.getY(idx), pos.getZ(idx));
+            ringHighlight.visible = true;
+            updateStats(idx);
+        } else {
+            ringHighlight.visible = false;
+        }
+    });
+
+    ringCanvas.addEventListener('mouseleave', () => { ringHighlight.visible = false; });
+}
+
+function resetCam(i){cameras[i].position.copy(defPos[i]);cameras[i].up.set(0,1,0);cameras[i].lookAt(0,0,0);ctrls[i].target.set(0,0,0);ctrls[i].reset();}
+window.resetCam=resetCam;
+
+function setMountAxes(){
+    const r=mountRoll*Math.PI/180,p=mountPitch*Math.PI/180,y=mountYaw*Math.PI/180;
+    const q=new THREE.Quaternion().setFromEuler(new THREE.Euler(r,p,y,'ZYX'));q.invert();
+    for(const ag of vehAxes)ag.quaternion.copy(q);
+}
+
+// Update the live RP ring on the RLS view from current roll/pitch
+// The expected field in level frame traces a ring: (R_h*cos(ψ), R_h*sin(ψ), Z_incl) for all ψ
+// In body frame: Rx(roll)^T @ Ry(pitch)^T @ level_ring_point
+// Since yaw is unconstrained, we show the full ring rotated by current roll/pitch
+function updateRPRing(roll, pitch){
+    if(!rlsRPRing) return;
+    const incl=66.27*Math.PI/180;
+    const ringR=EMFI*Math.cos(incl), ringZ=EMFI*Math.sin(incl);
+    const cr=Math.cos(roll),sr=Math.sin(roll),cp=Math.cos(pitch),sp=Math.sin(pitch);
+    const n=200;
+    const positions=[];
+    for(let i=0;i<=n;i++){
+        const th=2*Math.PI*i/n;
+        const lx=ringR*Math.cos(th), ly=ringR*Math.sin(th), lz=ringZ;
+        const y1=cr*ly+sr*lz, z1=-sr*ly+cr*lz;
+        const x2=cp*lx-sp*z1, z2=sp*lx+cp*z1;
+        positions.push(x2,y1,z2);
+    }
+    // Replace geometry (Line2/LineGeometry requires full rebuild)
+    const newGeo=new LineGeometry();newGeo.setPositions(positions);
+    rlsRPRing.geometry.dispose();rlsRPRing.geometry=newGeo;
+    rlsRPRing.computeLineDistances();
+}
+
+function resizeAll(){for(let i=0;i<renderers.length;i++){const rect=renderers[i].domElement.parentElement.getBoundingClientRect();const w=Math.floor(rect.width),h=Math.floor(rect.height);if(w>0&&h>0){renderers[i].setSize(w,h,false);cameras[i].aspect=w/h;cameras[i].updateProjectionMatrix();}}}
+
+function setCloud(cloud,data,colorFn){
+    const n=data.length;
+    if(n===0){clearCloud(cloud);return;}
+    const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+        pos[i*3]=data[i][0];pos[i*3+1]=data[i][1];pos[i*3+2]=data[i][2];
+        const c=colorFn(data[i]);col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+    }
+    const newGeo=new THREE.BufferGeometry();
+    newGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    newGeo.setAttribute('color',new THREE.BufferAttribute(col,3));
+    newGeo.setDrawRange(0,n);
+    newGeo.computeBoundingSphere();
+    cloud.pointsMesh.geometry=newGeo;
+    cloud.geo=newGeo;
+}
+function clearCloud(cloud){
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));
+    geo.setAttribute('color',new THREE.Float32BufferAttribute([],3));
+    cloud.pointsMesh.geometry=geo;
+    cloud.geo=geo;
+}
+
+const MAGENTA = new THREE.Color(0xe040fb);
+
+function updateRaw(){
+    const n=rawPts.length;
+    if(n===0)return;
+    const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+        pos[i*3]=rawPts[i][0];pos[i*3+1]=rawPts[i][1];pos[i*3+2]=rawPts[i][2];
+        // Excluded points: magenta. Included: error-colored.
+        const c = rawPts[i][4] ? rawErrCol(rawPts[i][3]) : MAGENTA;
+        col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+    }
+    const newGeo=new THREE.BufferGeometry();
+    newGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+    newGeo.setAttribute('color',new THREE.BufferAttribute(col,3));
+    newGeo.setDrawRange(0,n);
+    newGeo.computeBoundingSphere();
+    clouds.raw.pointsMesh.geometry=newGeo;
+    clouds.raw.geo=newGeo;
+}
+
+// Pre-allocated animation buffers for sphere (avoid GC/GPU upload churn)
+let animBufPos=null, animBufCol=null, animBufN=0;
+
+function initAnimBuffers(){
+    if(!animRawSphere) return;
+    const n=animRawSphere.length;
+    animBufPos=new Float32Array(n*3);animBufCol=new Float32Array(n*3);animBufN=n;
+    const posAttr=new THREE.BufferAttribute(animBufPos,3);posAttr.setUsage(THREE.DynamicDrawUsage);
+    const colAttr=new THREE.BufferAttribute(animBufCol,3);colAttr.setUsage(THREE.DynamicDrawUsage);
+    const g=new THREE.BufferGeometry();g.setAttribute('position',posAttr);g.setAttribute('color',colAttr);
+    g.setDrawRange(0,n);
+    clouds.animSphere.pointsMesh.geometry=g;clouds.animSphere.geo=g;
+}
+
+function updateAnim(){
+    if(!animRawSphere||!animCalSphere)return;
+    if(!animBufPos||animBufN!==animRawSphere.length) initAnimBuffers();
+    const t=animT, n=animBufN;
+    const hasLse = animLseSphere && animLseSphere.length === n;
+
+    // Sphere interpolation: Raw→LSE (0-0.5), LSE→LM (0.5-1.0). Hard transition at 0.5.
+    for(let i=0;i<n;i++){
+        let x, y, z;
+        if(hasLse){
+            if(t <= 0.5){
+                const s = t * 2;
+                x = animRawSphere[i][0]*(1-s) + animLseSphere[i][0]*s;
+                y = animRawSphere[i][1]*(1-s) + animLseSphere[i][1]*s;
+                z = animRawSphere[i][2]*(1-s) + animLseSphere[i][2]*s;
+            } else {
+                const s = (t - 0.5) * 2;
+                x = animLseSphere[i][0]*(1-s) + animCalSphere[i][0]*s;
+                y = animLseSphere[i][1]*(1-s) + animCalSphere[i][1]*s;
+                z = animLseSphere[i][2]*(1-s) + animCalSphere[i][2]*s;
+            }
+        } else {
+            x = animRawSphere[i][0]*(1-t) + animCalSphere[i][0]*t;
+            y = animRawSphere[i][1]*(1-t) + animCalSphere[i][1]*t;
+            z = animRawSphere[i][2]*(1-t) + animCalSphere[i][2]*t;
+        }
+        animBufPos[i*3]=x;animBufPos[i*3+1]=y;animBufPos[i*3+2]=z;
+        const mag=Math.sqrt(x*x+y*y+z*z);const c=errCol(Math.abs((mag-EMFI)/EMFI*100));
+        animBufCol[i*3]=c.r;animBufCol[i*3+1]=c.g;animBufCol[i*3+2]=c.b;
+    }
+    clouds.animSphere.geo.attributes.position.needsUpdate=true;
+    clouds.animSphere.geo.attributes.color.needsUpdate=true;
+
+    // Ring interpolation — exact same two-phase as sphere
+    if(animRawRing&&animCalRing){
+        const m=animRawRing[0].length;
+        const pos=new Float32Array(m*3),col=new Float32Array(m*3);
+        const hasLseRing = animLseRing && animLseRing[0] && animLseRing[0].length === m;
+        for(let i=0;i<m;i++){
+            let x, y, z;
+            if(hasLseRing){
+                if(t <= 0.5){
+                    const s = t * 2;
+                    x = animRawRing[0][i]*(1-s) + animLseRing[0][i]*s;
+                    y = animRawRing[1][i]*(1-s) + animLseRing[1][i]*s;
+                    z = animRawRing[2][i]*(1-s) + animLseRing[2][i]*s;
+                } else {
+                    const s = (t - 0.5) * 2;
+                    x = animLseRing[0][i]*(1-s) + animCalRing[0][i]*s;
+                    y = animLseRing[1][i]*(1-s) + animCalRing[1][i]*s;
+                    z = animLseRing[2][i]*(1-s) + animCalRing[2][i]*s;
+                }
+            } else {
+                x = animRawRing[0][i]*(1-t) + animCalRing[0][i]*t;
+                y = animRawRing[1][i]*(1-t) + animCalRing[1][i]*t;
+                z = animRawRing[2][i]*(1-t) + animCalRing[2][i]*t;
+            }
+            pos[i*3]=x;pos[i*3+1]=y;pos[i*3+2]=z;
+            const mag=Math.sqrt(x*x+y*y+z*z);const c=calColorFn([x,y,z]);
+            col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
+        }
+        const newGeo=new THREE.BufferGeometry();
+        newGeo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+        newGeo.setAttribute('color',new THREE.BufferAttribute(col,3));
+        newGeo.setDrawRange(0,m);
+        newGeo.computeBoundingSphere();
+        // Directly replace geometry on the Points mesh in the scene
+        const pm=clouds.animRing.pointsMesh;
+        pm.geometry=newGeo;
+        clouds.animRing.geo=newGeo;
+    }
+}
+
+window.animPlay=()=>{if(!animRawSphere)return;if(animT>=1){animT=0;animPauseUsed=false;animPauseCount=0;}animPlaying=true;};
+window.animPause=()=>{animPlaying=false;};
+window.animSeek=v=>{animT=v/100;animPlaying=false;animPauseUsed=false;animPauseCount=0;
+    const hasLse=animLseSphere&&animLseSphere.length>0;
+    const phase=hasLse?(animT<=0.5?'Raw → LSE':'LSE → LM'):'Raw → LSE';
+    el('anim-phase').textContent=phase;
+    el('anim-phase').style.color=hasLse?(animT<=0.5?'var(--rls-c)':'var(--lm-c)'):'var(--rls-c)';
+    updateAnim();};
+
+function animate(){
+    requestAnimationFrame(animate);
+    if(animPlaying&&animRawSphere){
+        const hasLse=animLseSphere&&animLseSphere.length>0;
+        // Pause for 30 frames (~0.5s) at the LSE midpoint
+        if(hasLse && animT>=0.499 && animT<=0.501 && !animPauseUsed){
+            animPauseCount=(animPauseCount||0)+1;
+            if(animPauseCount<120){/* hold */}
+            else{animPauseUsed=true;animPauseCount=0;animT=0.501;}
+        } else {
+            animT=Math.min(1,animT+0.005);
+        }
+        document.getElementById('aslider').value=animT*1000;
+        // Phase indicator
+        const phase=hasLse?(animT<=0.5?'Raw → LSE':'LSE → LM'):'Raw → LSE';
+        el('anim-phase').textContent=phase;
+        el('anim-phase').style.color=hasLse?(animT<=0.5?'var(--rls-c)':'var(--lm-c)'):'var(--rls-c)';
+        if(animT>=1)animPlaying=false;
+        updateAnim();
+    }
+    for(let i=0;i<renderers.length;i++){ctrls[i].update();renderers[i].render(scenes[i],cameras[i]);}
+}
+
+// ---------------------------------------------------------------------------
+// Plotly
+// ---------------------------------------------------------------------------
+const pC={responsive:true};
+const mb={modeBarButtonsToRemove:['toImage','sendDataToCloud','select2d','lasso2d'],modeBarButtonsToAdd:['resetScale2d']};
+function dkl(){return isDark?{paper_bgcolor:'#181818',plot_bgcolor:'#111'}:{paper_bgcolor:'#fff',plot_bgcolor:'#f8f8f8'}}
+function dxa(){return isDark?{color:'#444',gridcolor:'#222',zeroline:false}:{color:'#bbb',gridcolor:'#eee',zeroline:false}}
+function dfc(){return isDark?'#aaa':'#444'}
+
+function initPlotly(){
+    Plotly.newPlot('hist',[
+        {x:[],y:[],type:'bar',name:'Raw',marker:{color:'rgba(231,76,60,0.4)'}},
+        {x:[],y:[],type:'bar',name:'RLS',marker:{color:'rgba(74,158,255,0.45)'}},
+        {x:[],y:[],type:'bar',name:'LM',marker:{color:'rgba(46,204,113,0.5)'}},
+    ],{...dkl(),margin:{l:28,r:6,t:6,b:22},barmode:'overlay',
+        xaxis:{...dxa(),title:{text:'EMFI Error %',font:{size:9,color:dfc()}},autorange:true},
+        yaxis:{...dxa()},legend:{font:{color:dfc(),size:9},x:.02,y:.98,bgcolor:'transparent'}
+    },{...pC,...mb});
+
+    // MFI magnitude time-series — 6 traces:
+    // 0=raw included, 1=rls included, 2=lm included, 3=emfi ref,
+    // 4=raw excluded (scatter), 5=rls excluded (scatter)
+    Plotly.newPlot('mfi-plot',[
+        {x:[],y:[],mode:'lines',name:'Raw |B|',line:{color:'rgba(231,76,60,0.85)',width:1.5}},
+        {x:[],y:[],mode:'lines',name:'RLS |B|',line:{color:'rgba(74,158,255,0.85)',width:1.5}},
+        {x:[],y:[],mode:'lines',name:'LM |B|',line:{color:'rgba(46,204,113,0.9)',width:2}},
+        {x:[],y:[],mode:'lines',name:'EMFI',line:{color:'rgba(224,64,251,0.7)',width:1.5,dash:'dash'}},
+        {x:[],y:[],mode:'markers',name:'Raw (excl)',marker:{color:'rgba(231,76,60,0.25)',size:2},showlegend:false},
+        {x:[],y:[],mode:'markers',name:'RLS (excl)',marker:{color:'rgba(74,158,255,0.25)',size:2},showlegend:false},
+    ],{...dkl(),margin:{l:35,r:6,t:4,b:20},
+        xaxis:{...dxa(),title:{text:'Time (s)',font:{size:9,color:dfc()}}},
+        yaxis:{...dxa(),title:{text:'|B|',font:{size:9,color:dfc()}}},
+        legend:{font:{color:dfc(),size:9},x:0.01,y:0.99,bgcolor:'transparent',orientation:'h'},
+        showlegend:true,
+    },{...pC,...mb});
+
+    const xL=EMFI*1.3;
+    // Diagnostics: 3 traces per plot: Raw (red), RLS (blue), LVM (green) + ring/ideal
+    const xyL=()=>({...dkl(),margin:{l:30,r:6,t:16,b:26},
+        xaxis:{...dxa(),title:{text:'X (G)',font:{size:9,color:dfc()}},range:[-xL,xL],scaleanchor:'y',constrain:'domain'},
+        yaxis:{...dxa(),title:{text:'Y (G)',font:{size:9,color:dfc()}},range:[-xL,xL]},
+        legend:{font:{color:dfc(),size:8},x:.01,y:.99,bgcolor:'transparent'},showlegend:true});
+    const irL=()=>({...dkl(),margin:{l:30,r:6,t:16,b:26},
+        xaxis:{...dxa(),title:{text:'Incl Err (°)',font:{size:9,color:dfc()}},range:[-20,20]},
+        yaxis:{...dxa(),title:{text:'Radius Err (G)',font:{size:9,color:dfc()}},range:[-EMFI*.3,EMFI*.3]},
+        legend:{font:{color:dfc(),size:8},x:.01,y:.99,bgcolor:'transparent'},showlegend:true});
+
+    for(const id of['xy0','xy1'])Plotly.newPlot(id,[
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'Raw',marker:{size:3,color:'rgba(231,76,60,0.5)'}},
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'RLS',marker:{size:3,color:'rgba(74,158,255,0.5)'}},
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'LM',marker:{size:3,color:'rgba(46,204,113,0.5)'}},
+        {x:[],y:[],mode:'lines',name:'Expected',line:{color:'#e040fb',dash:'dash',width:4}},
+    ],xyL(),{...pC,...mb});
+
+    for(const id of['ir0','ir1'])Plotly.newPlot(id,[
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'Raw',marker:{size:3,color:'rgba(231,76,60,0.5)'}},
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'RLS',marker:{size:3,color:'rgba(74,158,255,0.5)'}},
+        {x:[],y:[],mode:'markers',type:'scattergl',name:'LM',marker:{size:3,color:'rgba(46,204,113,0.5)'}},
+        {x:[0],y:[0],mode:'markers',name:'Ideal',marker:{size:14,color:'#e040fb',symbol:'star',line:{width:1.5,color:'#fff'}}},
+    ],irL(),{...pC,...mb});
+}
+
+function mkRing(r,n){const x=[],y=[];for(let i=0;i<=n;i++){const th=2*Math.PI*i/n;x.push(r*Math.cos(th));y.push(r*Math.sin(th));}return{x,y};}
+
+// Theme
+window.toggleTheme=()=>{isDark=!isDark;document.documentElement.classList.toggle('light',!isDark);renderers.forEach(r=>r.setClearColor(isDark?0x0d0d0d:0xf2f2f2));
+    const pk=isDark?'#181818':'#fff',pp=isDark?'#111':'#f8f8f8',ax=isDark?'#444':'#bbb',gc=isDark?'#222':'#eee',fc=isDark?'#777':'#555';
+    for(const id of['hist','mfi-plot','xy0','xy1','ir0','ir1'])Plotly.relayout(id,{paper_bgcolor:pk,plot_bgcolor:pp,'xaxis.color':ax,'xaxis.gridcolor':gc,'xaxis.title.font.color':fc,'yaxis.color':ax,'yaxis.gridcolor':gc,'yaxis.title.font.color':fc,'legend.font.color':fc});};
+
+// ---------------------------------------------------------------------------
+// WebSocket
+// ---------------------------------------------------------------------------
+const el=id=>document.getElementById(id);const cmd=(c,x)=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({cmd:c,...(x||{})}));};
+function connect(){ws=new WebSocket(WS_URL);ws.onopen=()=>{el('sc').textContent='CONNECTED';el('sc').className='badge on';reqGeo();};ws.onclose=()=>{el('sc').textContent='DISCONNECTED';el('sc').className='badge';setTimeout(connect,2000);};ws.onmessage=e=>handle(JSON.parse(e.data));}
+window.doStart=()=>{started=true;isLogging=true;cmd('start');el('bs').style.display='none';el('bp').style.display='';el('br').style.display='none';};
+window.doPause=()=>{isLogging=false;cmd('pause');el('bp').style.display='none';el('br').style.display='';};
+window.doResume=()=>{isLogging=true;cmd('resume');el('br').style.display='none';el('bp').style.display='';};
+window.doReset=()=>{cmd('reset');started=false;isLogging=false;el('bs').style.display='';el('bp').style.display='none';el('br').style.display='none';rawPts.length=0;updateRaw();clearCloud(clouds.rls);clearCloud(clouds.lm);clearCloud(clouds.animSphere);clearCloud(clouds.animRing);clearCloud(clouds.inspect);clearCloud(clouds.inspRing);animRawSphere=animLseSphere=animCalSphere=animRawRing=animLseRing=animCalRing=null;};
+window.doCal=()=>cmd('calibrate');
+window.doExport=()=>cmd('export');
+window.setTh=v=>{const rads=parseFloat(v);el('tv').textContent=(rads*180/Math.PI).toFixed(1);cmd('set_gyro_threshold',{value:rads});};
+window.setUnit=v=>{cmd('set_unit',{value:v});};
+window.setMethod=v=>{cmd('set_method',{value:v});};
+function reqGeo(){if(navigator.geolocation)navigator.geolocation.getCurrentPosition(p=>cmd('geolocation',{lat:p.coords.latitude,lon:p.coords.longitude}),()=>cmd('geolocation',{lat:42.357,lon:-71.087}));else cmd('geolocation',{lat:42.357,lon:-71.087});}
+window.switchTab=i=>{document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',j===i));document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));setTimeout(()=>{resizeAll();for(const id of['hist','mfi-plot','xy0','xy1','ir0','ir1'])Plotly.Plots.resize(id);if(i===2&&animRawSphere)updateAnim();},50);};
+
+function handle(m){
+    if(m.type==='config'){hasMount=m.has_mount;mountRoll=m.mount_roll||0;mountPitch=m.mount_pitch||0;mountYaw=m.mount_yaw||0;setMountAxes();if(hasMount)el('lb0').textContent=`Raw (R:${mountRoll} P:${mountPitch} Y:${mountYaw})`;}
+    if(m.type==='points'){
+        for(const p of m.points){
+            const x=(hasMount&&p.vx!==undefined)?p.vx:p.mx;
+            const y=(hasMount&&p.vy!==undefined)?p.vy:p.my;
+            const z=(hasMount&&p.vz!==undefined)?p.vz:p.mz;
+            // included=true by default; updateRaw will color accordingly
+            rawPts.push([x,y,z,p.err||0,true]);
+        }
+        while(rawPts.length>60000)rawPts.shift();
+        updateRaw();
+        el('sn').textContent=m.n_logged+' samples';el('sl').textContent=m.logging?'LOGGING':(started?'PAUSED':'IDLE');el('sl').className='badge '+(m.logging?'on':(started?'warn':''));
+        const lp=m.points[m.points.length-1];el('sm').textContent=lp.in_motion?'MOVING':'STILL';el('sm').className='badge '+(lp.in_motion?'on':'');
+        if(lp.roll!==undefined) updateRPRing(lp.roll, lp.pitch);
+    }
+    if(m.type==='rls_update'){
+        if(m.calibrated)setCloud(clouds.rls,m.calibrated,calColorFn);
+        updHist(m.raw_hist,m.rls_hist,m.lm_hist,m.bin_centers);updInfo(m);
+        if(m.diagnostics)updDiag(m.diagnostics);
+        if(m.mfi_t)updateMFI(m.mfi_t, m.mfi_raw, m.mfi_rls, null, m.mfi_roll, m.mfi_pitch);
+    }
+    if(m.type==='cal_result'){
+        if(m.error){el('co').textContent='Error: '+m.error;el('co').style.color='var(--red)';return;}
+
+        // 1. Update calibrated sphere
+        if(m.calibrated) setCloud(clouds.lm, m.calibrated, calColorFn);
+
+        // 2. Update histograms and info panel
+        updHist(m.raw_hist, m.rls_hist, m.lm_hist, m.bin_centers);
+        updInfo(m);
+
+        // 3. Update MFI time series with LM/LSE trace
+        if(m.mfi_t && m.mfi_lm) updateMFI(m.mfi_t, null, null, m.mfi_lm, null, null);
+
+        // 4. Update diagnostics tab
+        if(m.diagnostics) updDiag(m.diagnostics);
+
+        // 5. EMFI percentage table
+        const q = m.quality;
+        if(q.raw_emfi_pct && q.cal_emfi_pct){
+            const rp=q.raw_emfi_pct, cp=q.cal_emfi_pct;
+            const v=(o,k)=>{const val=o[k]||o[String(k)];return val!==undefined?val.toFixed(1):'--';};
+            el('ep1').textContent=`${v(rp,1)}% → ${v(cp,1)}%`;
+            el('ep2').textContent=`${v(rp,2)}% → ${v(cp,2)}%`;
+            el('ep5').textContent=`${v(rp,5)}% → ${v(cp,5)}%`;
+        }
+
+        // 6. Calibration quality text
+        const g = q.relative_std<.05?'EXCELLENT':q.relative_std<.1?'GOOD':q.relative_std<.15?'FAIR':'POOR';
+        const meth = (m.method||el('method-sel').value).toUpperCase();
+        el('cal-sphere-label').textContent=meth+' Calibrated';
+        el('method-label').textContent=meth;
+        Plotly.restyle('hist',{name:meth},[2]);
+        Plotly.restyle('mfi-plot',{name:meth+' |B|'},[2]);
+        for(const id of['xy0','xy1','ir0','ir1']) Plotly.restyle(id,{name:meth},[2]);
+        el('co').style.color='var(--grn)';
+        let coTxt=`${meth} Calibration: ${g}\nSamples: ${q.n_samples}\nMean |B|: ${q.mean_radius.toFixed(6)} G\nStd |B|: ${q.std_radius.toFixed(6)} G\nRelative Std: ${(q.relative_std*100).toFixed(2)}%\nHard Iron: [${m.hard_iron.map(v=>v.toFixed(4)).join(', ')}]`;
+        if(m.file) coTxt+='\n'+m.file;
+        if(m.csv_file) coTxt+='\n'+m.csv_file;
+        el('co').textContent=coTxt;
+
+        // 7. Animation data — store ALL data FIRST, then render ONCE
+        if(m.raw_points && m.calibrated){
+            animRawSphere=m.raw_points;
+            animLseSphere=m.lse_points||null;
+            animCalSphere=m.calibrated;
+            animT=0;
+            el('aslider').value=0;
+            if(animLseSphere){
+                el('anim-mid-mark').style.display='';
+                el('anim-mid-tick').style.display='';
+                el('anim-end-mark').textContent='100% LM';
+                el('anim-end-mark').style.color='var(--lm-c)';
+            } else {
+                el('anim-mid-mark').style.display='none';
+                el('anim-mid-tick').style.display='none';
+                el('anim-end-mark').textContent='100% LSE';
+                el('anim-end-mark').style.color='var(--lm-c)';
+            }
+            el('anim-phase').textContent='Ready';
+        }
+        if(m.diagnostics && m.diagnostics.raw_lvl_3d && m.diagnostics.lm_lvl_3d){
+            animRawRing=m.diagnostics.raw_lvl_3d;
+            animLseRing=m.diagnostics.lse_lvl_3d||null;
+            animCalRing=m.diagnostics.lm_lvl_3d;
+        }
+        // Now init buffers and render with ALL data in place
+        if(animRawSphere){
+            initAnimBuffers();
+            updateAnim();
+        }
+
+        // 8. Populate inspect tab with calibrated sphere + ring
+        if(m.calibrated){
+            setCloud(clouds.inspect, m.calibrated, calColorFn);
+            inspectMeta = m.pt_meta || null;
+        }
+        if(m.diagnostics && m.diagnostics.lm_lvl_3d){
+            const d=m.diagnostics.lm_lvl_3d;
+            const ringPts=[];
+            for(let i=0;i<d[0].length;i++) ringPts.push([d[0][i],d[1][i],d[2][i]]);
+            setCloud(clouds.inspRing, ringPts, calColorFn);
+        }
+    }
+    if(m.type==='wmm'){EMFI=m.emfi||m.emfi_ut*0.01||.5127;el('de').textContent=EMFI.toFixed(4);el('di').textContent=(m.inclination_deg||0).toFixed(2)+'°';el('dd').textContent=(m.declination_deg||0).toFixed(2)+'°';}
+    if(m.type==='unit_changed'){EMFI=m.emfi;el('de').textContent=EMFI.toFixed(4)+' '+m.label;}
+    if(m.type==='method_changed'){
+        // Only update the dropdown label — don't touch plot legends until calibrate runs
+        el('method-label').textContent=m.method.toUpperCase()+' (pending)';
+    }
+    if(m.type==='export_result'){
+        if(m.error){el('co').textContent+='\nExport error: '+m.error;}
+        else{el('co').textContent+='\nExported: '+m.file+'\n'+m.csv_file;}
+    }
+    if(m.type==='reset'){rawPts.length=0;updateRaw();clearCloud(clouds.rls);clearCloud(clouds.lm);clearCloud(clouds.animSphere);clearCloud(clouds.animRing);clearCloud(clouds.inspect);clearCloud(clouds.inspRing);animRawSphere=animLseSphere=animCalSphere=animRawRing=animLseRing=animCalRing=null;
+        el('co').textContent='';el('dh').textContent='--';
+        el('dsi').innerHTML='<div class="row">[ --  --  -- ]</div><div class="row">[ --  --  -- ]</div><div class="row">[ --  --  -- ]</div>';
+        el('dm').textContent='--';el('ds').textContent='--';el('dr').textContent='--';el('qf').style.width='0';
+        el('ep1').textContent='--';el('ep2').textContent='--';el('ep5').textContent='--';
+        for(let t=0;t<3;t++)Plotly.restyle('hist',{x:[[]],y:[[]]},t);
+        for(let t=0;t<4;t++)Plotly.restyle('mfi-plot',{x:[[]],y:[[]]},t);
+        for(const id of['xy0','xy1','ir0','ir1'])for(let t=0;t<3;t++)Plotly.restyle(id,{x:[[]],y:[[]]},t);
+        regionMarkers=[0,1];regionEnabled=[true];dataTimeMax=1;_mfi={t:[],raw:[],rls:[],lm:[],roll:[],pitch:[]};renderRegions();}
+    if(m.type==='status'){isLogging=m.logging;el('sl').textContent=m.logging?'LOGGING':'PAUSED';el('sl').className='badge '+(m.logging?'on':'warn');}
+}
+
+function updHist(rh,rlsh,lmh,bc){if(!bc)return;if(rh)Plotly.restyle('hist',{x:[bc],y:[rh]},[0]);if(rlsh)Plotly.restyle('hist',{x:[bc],y:[rlsh]},[1]);if(lmh)Plotly.restyle('hist',{x:[bc],y:[lmh]},[2]);}
+function updInfo(m){
+    if(m.hard_iron) el('dh').textContent='['+m.hard_iron.map(v=>v.toFixed(4)).join(', ')+']';
+    if(m.soft_iron){
+        const s=m.soft_iron;
+        const fmt=v=>v.toFixed(6).padStart(10);
+        el('dsi').innerHTML=
+            `<div class="row">[${fmt(s[0][0])} ${fmt(s[0][1])} ${fmt(s[0][2])} ]</div>`+
+            `<div class="row">[${fmt(s[1][0])} ${fmt(s[1][1])} ${fmt(s[1][2])} ]</div>`+
+            `<div class="row">[${fmt(s[2][0])} ${fmt(s[2][1])} ${fmt(s[2][2])} ]</div>`;
+    }
+    if(m.mean_radius!==undefined) el('dm').textContent=m.mean_radius.toFixed(6);
+    if(m.std_radius!==undefined) el('ds').textContent=m.std_radius.toFixed(6);
+    if(m.relative_std!==undefined){
+        const rs=m.relative_std;
+        el('dr').textContent=(rs*100).toFixed(2)+'%';
+        el('dr').className='v '+(rs<.05?'g':rs<.1?'o':'r');
+        const pct=Math.max(0,Math.min(100,(1-rs/.2)*100));
+        el('qf').style.width=pct+'%';
+        el('qf').style.background=pct>75?'var(--grn)':pct>40?'var(--org)':'var(--red)';
+    }
+}
+function updDiag(d){
+    if(!d)return;const ring=mkRing(d.ring_r,200);
+    const filt=(arr,m)=>arr.filter((_,i)=>m[i]);
+    const m20=d.roll_abs.map((r,i)=>r<=20&&d.pitch_abs[i]<=20);
+
+    // XY no filter: raw(0), rls(1), lm(2), ring(3)
+    Plotly.restyle('xy0',{x:[d.raw_lvl_xy[0]],y:[d.raw_lvl_xy[1]]},[0]);
+    Plotly.restyle('xy0',{x:[d.rls_lvl_xy[0]],y:[d.rls_lvl_xy[1]]},[1]);
+    if(d.lm_lvl_xy)Plotly.restyle('xy0',{x:[d.lm_lvl_xy[0]],y:[d.lm_lvl_xy[1]]},[2]);
+    Plotly.restyle('xy0',{x:[ring.x],y:[ring.y]},[3]);
+
+    Plotly.restyle('xy1',{x:[filt(d.raw_lvl_xy[0],m20)],y:[filt(d.raw_lvl_xy[1],m20)]},[0]);
+    Plotly.restyle('xy1',{x:[filt(d.rls_lvl_xy[0],m20)],y:[filt(d.rls_lvl_xy[1],m20)]},[1]);
+    if(d.lm_lvl_xy)Plotly.restyle('xy1',{x:[filt(d.lm_lvl_xy[0],m20)],y:[filt(d.lm_lvl_xy[1],m20)]},[2]);
+    Plotly.restyle('xy1',{x:[ring.x],y:[ring.y]},[3]);
+
+    // Incl/Radius: raw(0), rls(1), lm(2), ideal(3)
+    Plotly.restyle('ir0',{x:[d.raw_incl_err],y:[d.raw_radius_err]},[0]);
+    Plotly.restyle('ir0',{x:[d.rls_incl_err],y:[d.rls_radius_err]},[1]);
+    if(d.lm_incl_err)Plotly.restyle('ir0',{x:[d.lm_incl_err],y:[d.lm_radius_err]},[2]);
+
+    Plotly.restyle('ir1',{x:[filt(d.raw_incl_err,m20)],y:[filt(d.raw_radius_err,m20)]},[0]);
+    Plotly.restyle('ir1',{x:[filt(d.rls_incl_err,m20)],y:[filt(d.rls_radius_err,m20)]},[1]);
+    if(d.lm_incl_err)Plotly.restyle('ir1',{x:[filt(d.lm_incl_err,m20)],y:[filt(d.lm_radius_err,m20)]},[2]);
+}
+
+// ---------------------------------------------------------------------------
+// Region editor — split markers + toggleable regions
+// ---------------------------------------------------------------------------
+let mfiVisible = [true, true, true];  // [raw, rls, lm]
+let rpRollMax = 180, rpPitchMax = 90;  // degrees, filter thresholds
+
+window.setRPFilter = (input, axis) => {
+    const val = parseInt(input.value);
+    if (axis === 'roll') { rpRollMax = val; el('rp-roll-val').textContent = val; }
+    else { rpPitchMax = val; el('rp-pitch-val').textContent = val; }
+    // Re-render MFI with updated filter
+    if (_mfi.t.length > 0) updateMFI(null, null, null, null, null, null);
+};
+const mfiBtnIds = ['mfi-raw-btn', 'mfi-rls-btn', 'mfi-lm-btn'];
+
+window.toggleMfiTrace = (idx) => {
+    mfiVisible[idx] = !mfiVisible[idx];
+    const btn = el(mfiBtnIds[idx]);
+    btn.style.opacity = mfiVisible[idx] ? '1' : '0.3';
+    // Toggle trace visibility; trace 3 (EMFI ref) always visible
+    Plotly.restyle('mfi-plot', {visible: mfiVisible[idx] ? true : 'legendonly'}, [idx]);
+    // Auto-rescale Y to visible traces
+    Plotly.relayout('mfi-plot', {'yaxis.autorange': true});
+};
+
+let regionMarkers = [0, 1];  // relative times; first and last are fixed (start/end of data)
+let regionEnabled = [true];  // regionEnabled[i] = region between marker[i] and marker[i+1]
+let dataTimeMax = 1;
+let draggingMarker = -1;
+
+function renderRegions() {
+    const bar = el('region-bar');
+    bar.innerHTML = '';
+    const total = regionMarkers[regionMarkers.length-1] - regionMarkers[0];
+    if (total <= 0) return;
+
+    // Segments first (behind markers)
+    for (let i = 0; i < regionEnabled.length; i++) {
+        const seg = document.createElement('div');
+        seg.className = 'region-seg ' + (regionEnabled[i] ? 'on' : 'off');
+        const leftPct = (regionMarkers[i] - regionMarkers[0]) / total * 100;
+        const widthPct = (regionMarkers[i+1] - regionMarkers[i]) / total * 100;
+        seg.style.left = leftPct + '%';
+        seg.style.width = widthPct + '%';
+        const label = regionEnabled[i] ? 'ON' : 'OFF';
+        const tStart = regionMarkers[i].toFixed(1);
+        const tEnd = regionMarkers[i+1].toFixed(1);
+        seg.textContent = widthPct > 8 ? `${label} (${tStart}-${tEnd}s)` : label;
+        const idx = i;
+        seg.onclick = () => { regionEnabled[idx] = !regionEnabled[idx]; renderRegions(); };
+        seg.oncontextmenu = (e) => {
+            e.preventDefault();
+            // Split this region at the click position
+            const segRect = seg.getBoundingClientRect();
+            const frac = (e.clientX - segRect.left) / segRect.width;
+            const splitT = regionMarkers[idx] + frac * (regionMarkers[idx+1] - regionMarkers[idx]);
+            // Don't split too close to edges
+            const minGap = (regionMarkers[idx+1] - regionMarkers[idx]) * 0.05;
+            if (splitT - regionMarkers[idx] < minGap || regionMarkers[idx+1] - splitT < minGap) return;
+            regionMarkers.splice(idx+1, 0, splitT);
+            const was = regionEnabled[idx];
+            regionEnabled.splice(idx, 1, was, was);
+            renderRegions();
+        };
+        bar.appendChild(seg);
+    }
+
+    // Markers on top
+    for (let i = 0; i < regionMarkers.length; i++) {
+        const m = document.createElement('div');
+        const isFixed = (i === 0 || i === regionMarkers.length - 1);
+        m.className = 'region-marker' + (isFixed ? ' fixed' : '');
+        m.style.left = ((regionMarkers[i] - regionMarkers[0]) / total * 100) + '%';
+
+        const line = document.createElement('div');
+        line.className = 'marker-line';
+        m.appendChild(line);
+
+        const label = document.createElement('div');
+        label.className = 'marker-label';
+        label.textContent = (i + 1);
+        m.appendChild(label);
+
+        if (!isFixed) {
+            const mi = i;
+            // Drag
+            m.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                draggingMarker = mi;
+            });
+            // Double-click to remove
+            m.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                regionMarkers.splice(mi, 1);
+                const merged = regionEnabled[mi - 1] || regionEnabled[mi];
+                regionEnabled.splice(mi - 1, 2, merged);
+                renderRegions();
+            });
+        }
+
+        bar.appendChild(m);
+    }
+
+    // Re-render MFI with updated region masks
+    if (_mfi.t.length > 0) updateMFI(null, null, null, null, null, null);
+}
+
+// Mouse drag on document for marker dragging
+document.addEventListener('mousemove', (e) => {
+    if (draggingMarker < 0) return;
+    const bar = el('region-bar');
+    const rect = bar.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    const total = regionMarkers[regionMarkers.length-1] - regionMarkers[0];
+    let newT = regionMarkers[0] + frac * total;
+
+    // Clamp between neighbors
+    const minT = regionMarkers[draggingMarker - 1] + total * 0.01;
+    const maxT = regionMarkers[draggingMarker + 1] - total * 0.01;
+    newT = Math.max(minT, Math.min(maxT, newT));
+
+    regionMarkers[draggingMarker] = newT;
+    renderRegions();
+});
+
+document.addEventListener('mouseup', () => { draggingMarker = -1; });
+
+// Add split at midpoint of the largest enabled region
+window.addSplitAtCenter = () => {
+    let bestIdx = 0, bestWidth = 0;
+    for (let i = 0; i < regionEnabled.length; i++) {
+        const w = regionMarkers[i+1] - regionMarkers[i];
+        if (w > bestWidth) { bestWidth = w; bestIdx = i; }
+    }
+    const mid = (regionMarkers[bestIdx] + regionMarkers[bestIdx+1]) / 2;
+    regionMarkers.splice(bestIdx + 1, 0, mid);
+    const wasEnabled = regionEnabled[bestIdx];
+    regionEnabled.splice(bestIdx, 1, wasEnabled, wasEnabled);
+    renderRegions();
+};
+
+// Remove the last added split (not the fixed start/end)
+window.removeLastSplit = () => {
+    if (regionMarkers.length <= 2) return;
+    // Remove the last non-fixed marker (second to last in the array)
+    const removeIdx = regionMarkers.length - 2;
+    regionMarkers.splice(removeIdx, 1);
+    // Merge the two regions around it — keep enabled if either was enabled
+    const merged = regionEnabled[removeIdx - 1] || regionEnabled[removeIdx];
+    regionEnabled.splice(removeIdx - 1, 2, merged);
+    renderRegions();
+};
+
+function getEnabledRegions() {
+    const regions = [];
+    for (let i = 0; i < regionEnabled.length; i++) {
+        if (regionEnabled[i]) {
+            regions.push({ start: regionMarkers[i], end: regionMarkers[i+1] });
+        }
+    }
+    return regions;
+}
+
+// Cached MFI data for re-filtering
+let _mfi = {t:[], raw:[], rls:[], lm:[], roll:[], pitch:[]};
+
+function updateMFI(mfi_t, mfi_raw, mfi_rls, mfi_lm, mfi_roll, mfi_pitch) {
+    // Cache new data
+    if (mfi_t) _mfi.t = mfi_t;
+    if (mfi_raw) { _mfi.raw=mfi_raw; _mfi.rls=mfi_rls; _mfi.roll=mfi_roll||[]; _mfi.pitch=mfi_pitch||[]; }
+    if (mfi_lm) _mfi.lm = mfi_lm;
+
+    // Compute inclusion mask: region + RP filter
+    const inc=[], exc=[];
+    for (let i=0; i<_mfi.t.length; i++) {
+        const t = _mfi.t[i];
+        // Region check
+        let inRegion = false;
+        for (let r=0; r<regionEnabled.length; r++) {
+            if (regionEnabled[r] && t >= regionMarkers[r] && t <= regionMarkers[r+1]) { inRegion=true; break; }
+        }
+        // RP check
+        let rpOk = true;
+        if (_mfi.roll.length > i && _mfi.pitch.length > i) {
+            if (_mfi.roll[i] > rpRollMax || _mfi.pitch[i] > rpPitchMax) rpOk = false;
+        }
+        if (inRegion && rpOk) inc.push(i); else exc.push(i);
+    }
+
+    const pick = (arr, idx) => idx.map(i => arr[i]);
+
+    // Included: lines (traces 0,1)
+    Plotly.restyle('mfi-plot', {x:[pick(_mfi.t,inc)], y:[pick(_mfi.raw,inc)]}, [0]);
+    Plotly.restyle('mfi-plot', {x:[pick(_mfi.t,inc)], y:[pick(_mfi.rls,inc)]}, [1]);
+    // Excluded: scatter (traces 4,5)
+    Plotly.restyle('mfi-plot', {x:[pick(_mfi.t,exc)], y:[pick(_mfi.raw,exc)]}, [4]);
+    Plotly.restyle('mfi-plot', {x:[pick(_mfi.t,exc)], y:[pick(_mfi.rls,exc)]}, [5]);
+    // EMFI ref
+    Plotly.restyle('mfi-plot', {x:[_mfi.t], y:[_mfi.t.map(()=>EMFI)]}, [3]);
+    // LM/LSE cal trace if available
+    if (_mfi.lm.length > 0) Plotly.restyle('mfi-plot', {x:[pick(_mfi.t,inc)], y:[pick(_mfi.lm,inc)]}, [2]);
+
+    // Update region bar time range
+    if (_mfi.t.length > 1) {
+        const newMax = _mfi.t[_mfi.t.length - 1];
+        if (newMax > dataTimeMax) {
+            regionMarkers[regionMarkers.length - 1] = newMax;
+            dataTimeMax = newMax;
+            renderRegions();
+        }
+    }
+}
+
+// Override doCal to send enabled regions + RP filter
+window.doCal = () => {
+    const allEnabled = regionEnabled.every(v => v);
+    const regions = allEnabled ? undefined : getEnabledRegions();
+    const rp_filter = (rpRollMax < 90 || rpPitchMax < 90) ? {roll_max: rpRollMax, pitch_max: rpPitchMax} : undefined;
+    cmd('calibrate', { regions, rp_filter });
+};
+
+initThree();setupInspect();initPlotly();renderRegions();connect();animate();
+window.addEventListener('resize',()=>{resizeAll();updateLineResolutions();for(const id of['hist','mfi-plot','xy0','xy1','ir0','ir1'])Plotly.Plots.resize(id);});
+setTimeout(resizeAll,100);setTimeout(resizeAll,500);
+</script>
+</body>
+</html>
