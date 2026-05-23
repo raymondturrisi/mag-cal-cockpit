@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" type="image/png" href="/static/snoopy_flying_ace.png">
 <title>Mag Cal Cockpit</title>
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/","three/lines/Line2":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/Line2.js","three/lines/LineMaterial":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/LineMaterial.js","three/lines/LineGeometry":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/lines/LineGeometry.js"}}</script>
@@ -222,7 +223,7 @@ import {Line2} from 'three/lines/Line2';
 import {LineMaterial} from 'three/lines/LineMaterial';
 import {LineGeometry} from 'three/lines/LineGeometry';
 
-let isDark=true, EMFI=0.5127, ws, hasMount=false, isLogging=false, started=false;
+let isDark=true, EMFI=0.5127, INCL_DEG=66.27, ws, hasMount=false, isLogging=false, started=false;
 const WS_URL=`ws://${location.hostname}:${location.port}/ws`;
 const rawPts=[];
 let mountRoll=0,mountPitch=0,mountYaw=0;
@@ -306,13 +307,13 @@ let rlsRPRing=null; // live RP-compensated ring on RLS view
 // NED-X→-Z, NED-Y→+X, NED-Z→-Y.
 // 3/4 iso from behind-right-above: NED(-1.3, 0.8, -0.8) → Three.js(0.8, 0.8, 1.3)
 const defPos=[
-    new THREE.Vector3(0.8, 0.8, 1.3),  // raw iso
-    new THREE.Vector3(0.8, 0.8, 1.3),  // rls iso
-    new THREE.Vector3(0.8, 0.8, 1.3),  // lm iso
-    new THREE.Vector3(0.8, 0.8, 1.3),  // anim sphere
-    new THREE.Vector3(0.8, 0.8, 1.3),  // anim ring
-    new THREE.Vector3(0.8, 0.8, 1.3),  // inspect sphere
-    new THREE.Vector3(0.8, 0.8, 1.3),  // inspect ring
+    new THREE.Vector3(1.5, 1.5, 2.5),  // raw iso
+    new THREE.Vector3(1.5, 1.5, 2.5),  // rls iso
+    new THREE.Vector3(1.5, 1.5, 2.5),  // lm iso
+    new THREE.Vector3(1.5, 1.5, 2.5),  // anim sphere
+    new THREE.Vector3(1.5, 1.5, 2.5),  // anim ring
+    new THREE.Vector3(1.5, 1.5, 2.5),  // inspect sphere
+    new THREE.Vector3(1.5, 1.5, 2.5),  // inspect ring
 ];
 
 function mkScene(cid,idx,opts){
@@ -334,20 +335,20 @@ function mkScene(cid,idx,opts){
 
     // Ideal sphere
     if(opts?.sphere!==false){
-        const sg=new THREE.SphereGeometry(EMFI,48,32);
+        const sg=new THREE.SphereGeometry(1.0,48,32);
         const sm=new THREE.MeshBasicMaterial({color:0x5577dd,wireframe:true,transparent:true,opacity:.22,depthTest:false});
         const smesh=new THREE.Mesh(sg,sm);smesh.renderOrder=999;nedRoot.add(smesh);
     }
 
     // Static inclination ring
     if(opts?.ring){
-        const ringR=EMFI*Math.cos(66.27*Math.PI/180), ringZ=EMFI*Math.sin(66.27*Math.PI/180);
+        const ringR=Math.cos(INCL_DEG*Math.PI/180), ringZ=Math.sin(INCL_DEG*Math.PI/180);
         nedRoot.add(mk3DRing(ringR,ringZ,200,0xe040fb,5));
     }
 
     // NED vehicle axes with labels
     if(opts?.axes!==false){
-        const ag=new THREE.Group();const al=EMFI*.5;
+        const ag=new THREE.Group();const al=0.5;
         ag.add(new THREE.ArrowHelper(new THREE.Vector3(1,0,0),new THREE.Vector3(),al,0xff4444,al*.13,al*.07));
         ag.add(new THREE.ArrowHelper(new THREE.Vector3(0,1,0),new THREE.Vector3(),al,0x44ff44,al*.13,al*.07));
         ag.add(new THREE.ArrowHelper(new THREE.Vector3(0,0,1),new THREE.Vector3(),al,0x4488ff,al*.13,al*.07));
@@ -510,8 +511,8 @@ function setMountAxes(){
 // Since yaw is unconstrained, we show the full ring rotated by current roll/pitch
 function updateRPRing(roll, pitch){
     if(!rlsRPRing) return;
-    const incl=66.27*Math.PI/180;
-    const ringR=EMFI*Math.cos(incl), ringZ=EMFI*Math.sin(incl);
+    const incl=INCL_DEG*Math.PI/180;
+    const ringR=Math.cos(incl), ringZ=Math.sin(incl);
     const cr=Math.cos(roll),sr=Math.sin(roll),cp=Math.cos(pitch),sp=Math.sin(pitch);
     const n=200;
     const positions=[];
@@ -534,8 +535,9 @@ function setCloud(cloud,data,colorFn){
     const n=data.length;
     if(n===0){clearCloud(cloud);return;}
     const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+    const s=1.0/EMFI; // normalize to unit sphere
     for(let i=0;i<n;i++){
-        pos[i*3]=data[i][0];pos[i*3+1]=data[i][1];pos[i*3+2]=data[i][2];
+        pos[i*3]=data[i][0]*s;pos[i*3+1]=data[i][1]*s;pos[i*3+2]=data[i][2]*s;
         const c=colorFn(data[i]);col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
     }
     const newGeo=new THREE.BufferGeometry();
@@ -560,8 +562,9 @@ function updateRaw(){
     const n=rawPts.length;
     if(n===0)return;
     const pos=new Float32Array(n*3),col=new Float32Array(n*3);
+    const s=1.0/EMFI;
     for(let i=0;i<n;i++){
-        pos[i*3]=rawPts[i][0];pos[i*3+1]=rawPts[i][1];pos[i*3+2]=rawPts[i][2];
+        pos[i*3]=rawPts[i][0]*s;pos[i*3+1]=rawPts[i][1]*s;pos[i*3+2]=rawPts[i][2]*s;
         // Excluded points: magenta. Included: error-colored.
         const c = rawPts[i][4] ? rawErrCol(rawPts[i][3]) : MAGENTA;
         col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
@@ -615,7 +618,8 @@ function updateAnim(){
             y = animRawSphere[i][1]*(1-t) + animCalSphere[i][1]*t;
             z = animRawSphere[i][2]*(1-t) + animCalSphere[i][2]*t;
         }
-        animBufPos[i*3]=x;animBufPos[i*3+1]=y;animBufPos[i*3+2]=z;
+        const ns=1.0/EMFI;
+        animBufPos[i*3]=x*ns;animBufPos[i*3+1]=y*ns;animBufPos[i*3+2]=z*ns;
         const mag=Math.sqrt(x*x+y*y+z*z);const c=errCol(Math.abs((mag-EMFI)/EMFI*100));
         animBufCol[i*3]=c.r;animBufCol[i*3+1]=c.g;animBufCol[i*3+2]=c.b;
     }
@@ -646,7 +650,8 @@ function updateAnim(){
                 y = animRawRing[1][i]*(1-t) + animCalRing[1][i]*t;
                 z = animRawRing[2][i]*(1-t) + animCalRing[2][i]*t;
             }
-            pos[i*3]=x;pos[i*3+1]=y;pos[i*3+2]=z;
+            const rns=1.0/EMFI;
+            pos[i*3]=x*rns;pos[i*3+1]=y*rns;pos[i*3+2]=z*rns;
             const mag=Math.sqrt(x*x+y*y+z*z);const c=calColorFn([x,y,z]);
             col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;
         }
@@ -781,7 +786,14 @@ function reqGeo(){if(navigator.geolocation)navigator.geolocation.getCurrentPosit
 window.switchTab=i=>{document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',j===i));document.querySelectorAll('.page').forEach((p,j)=>p.classList.toggle('active',j===i));setTimeout(()=>{resizeAll();for(const id of['hist','mfi-plot','xy0','xy1','ir0','ir1'])Plotly.Plots.resize(id);if(i===2&&animRawSphere)updateAnim();},50);};
 
 function handle(m){
-    if(m.type==='config'){hasMount=m.has_mount;mountRoll=m.mount_roll||0;mountPitch=m.mount_pitch||0;mountYaw=m.mount_yaw||0;setMountAxes();if(hasMount)el('lb0').textContent=`Raw (R:${mountRoll} P:${mountPitch} Y:${mountYaw})`;}
+    if(m.type==='config'){
+        hasMount=m.has_mount;mountRoll=m.mount_roll||0;mountPitch=m.mount_pitch||0;mountYaw=m.mount_yaw||0;
+        if(m.emfi) EMFI=m.emfi;
+        if(m.unit) el('unit-sel').value=m.unit;
+        if(m.unit_label) el('de').textContent=EMFI.toFixed(4)+' '+m.unit_label;
+        setMountAxes();
+        if(hasMount) el('lb0').textContent=`Raw (R:${mountRoll} P:${mountPitch} Y:${mountYaw})`;
+    }
     if(m.type==='points'){
         for(const p of m.points){
             const x=(hasMount&&p.vx!==undefined)?p.vx:p.mx;
@@ -885,8 +897,13 @@ function handle(m){
             setCloud(clouds.inspRing, ringPts, calColorFn);
         }
     }
-    if(m.type==='wmm'){EMFI=m.emfi||m.emfi_ut*0.01||.5127;el('de').textContent=EMFI.toFixed(4);el('di').textContent=(m.inclination_deg||0).toFixed(2)+'°';el('dd').textContent=(m.declination_deg||0).toFixed(2)+'°';}
-    if(m.type==='unit_changed'){EMFI=m.emfi;el('de').textContent=EMFI.toFixed(4)+' '+m.label;}
+    if(m.type==='wmm'){EMFI=m.emfi||m.emfi_ut*0.01||.5127;if(m.inclination_deg)INCL_DEG=m.inclination_deg;el('de').textContent=EMFI.toFixed(4);el('di').textContent=INCL_DEG.toFixed(2)+'°';el('dd').textContent=(m.declination_deg||0).toFixed(2)+'°';}
+    if(m.type==='unit_changed'){
+        EMFI=m.emfi;
+        el('de').textContent=EMFI.toFixed(4)+' '+m.label;
+        el('unit-sel').value=m.unit||'gauss';
+        // Data is normalized by EMFI before display, so no scene rebuild needed
+    }
     if(m.type==='method_changed'){
         // Only update the dropdown label — don't touch plot legends until calibrate runs
         el('method-label').textContent=m.method.toUpperCase()+' (pending)';

@@ -482,7 +482,8 @@ async def ws_endpoint(websocket: WebSocket):
     await websocket.accept()
     clients.add(websocket)
     has_mount = any(mount_config[k] != 0 for k in mount_config)
-    await websocket.send_text(json.dumps({'type':'config', **mount_config, 'has_mount':has_mount}))
+    await websocket.send_text(json.dumps({'type':'config', **mount_config, 'has_mount':has_mount,
+        'emfi':get_emfi(), 'unit':mag_unit, 'unit_label':get_unit_label()}))
     # Send accumulated points on reconnect
     if all_display_pts:
         await websocket.send_text(json.dumps({'type':'points','points':all_display_pts,
@@ -667,14 +668,15 @@ async def handle_msg(ws, message):
         try:
             hi, si, quality, cal = lvm_result
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-            out_dir = Path(__file__).parent
-            csv_file = out_dir / f'mcc_raw_{ts}.csv'
-            dat_file = out_dir / 'mag_cal.dat'
-            session_file = out_dir / f'mcc_session_{ts}.json'
+            export_dir = Path(__file__).parent / f'mcc_{ts}'
+            export_dir.mkdir(exist_ok=True)
+            csv_file = export_dir / 'mcc_raw.csv'
+            dat_file = export_dir / 'mag_cal.dat'
+            session_file = export_dir / 'mcc_session.json'
             save_csv_log(full_rows, csv_file, mask=last_cal_mask)
             save_calibration(hi, si, quality, dat_file, csv_path=str(csv_file))
             save_session(session_file, hi, si, quality, cal)
-            await bcast({'type':'export_result','file':str(dat_file),'csv_file':str(csv_file),'session_file':str(session_file)})
+            await bcast({'type':'export_result','dir':str(export_dir),'file':str(dat_file),'csv_file':str(csv_file),'session_file':str(session_file)})
         except Exception as e:
             print(f"Export error: {e}")
             await bcast({'type':'export_result','error':str(e)})
