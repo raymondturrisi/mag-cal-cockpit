@@ -1,6 +1,6 @@
 # magcc — Mag Cal Cockpit
 
-Experimental and in active development. It works and is in use, but expect quirks and breaking changes between 0.x releases.
+Experimental and in active development. It works and is in use, but expect quirks and breaking changes between 0.x releases. This is an early release, made public so collaborators can use it. It is part of ongoing work and has not yet been described in a publication.
 
 ![magcc animation: raw data to final calibration](docs/media/magcc-animation_overview.gif)
 

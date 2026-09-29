@@ -1,12 +1,11 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-fancy-pypi-readme"]
 build-backend = "hatchling.build"
 
 [project]
 name = "magcc"
-dynamic = ["version"]
+dynamic = ["version", "readme"]
 description = "Live magnetometer hard/soft-iron calibration with a browser cockpit, fed by a simple UDP protocol"
-readme = "README.md"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
@@ -35,6 +34,20 @@ Repository = "https://github.com/raymondturrisi/mag-cal-cockpit"
 
 [tool.hatch.version]
 path = "src/magcc/__init__.py"
+
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((docs/media/[^)]+\.mp4)\)'
+replacement = '](https://github.com/raymondturrisi/mag-cal-cockpit/blob/main/\1)'
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
+pattern = '\]\((docs/media/[^)]+)\)'
+replacement = '](https://raw.githubusercontent.com/raymondturrisi/mag-cal-cockpit/main/\1)'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/magcc"]
