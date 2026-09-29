@@ -50,7 +50,7 @@ One ASCII sentence per UDP datagram:
 | `ts` | seconds (epoch or monotonic) |
 | `ax..az` | any (not used by the fit) |
 | `gx..gz` | rad/s (motion gating threshold) |
-| `mx..mz` | Gauss, µT or nT — select the matching unit in the UI |
+| `mx..mz` | Gauss, µT or nT (select the matching unit in the UI) |
 | `roll, pitch, yaw` | rad (roll/pitch used for level-frame diagnostics) |
 
 Exactly 13 fields; anything else is ignored. `hbk_cv7_cli --mcc` sends this format. All vectors are in the sensor frame. With `--magcc auto` (default) magcc locks onto the first schema that parses. Later schemas will start with a tag field (e.g. `|MAGCC1,...*`) so they remain distinguishable from v0.
@@ -60,7 +60,7 @@ Exactly 13 fields; anything else is ignored. `hbk_cv7_cli --mcc` sends this form
 The AHRS/IMU application feeding magcc must:
 
 - send magcc v0 packets (above) over UDP to the magcc host and port;
-- send **raw, uncalibrated** magnetometer data — disable or clear any onboard hard/soft-iron calibration first, otherwise magcc fits on top of it;
+- send **raw, uncalibrated** magnetometer data. Disable or clear any onboard hard/soft-iron calibration first, otherwise magcc fits on top of it;
 - send roll/pitch from its own filter (used only for the level-frame diagnostics, not the fit).
 
 ## Workflow
@@ -98,6 +98,6 @@ Apply as `m_cal = A @ (m_raw - b)`. The `#` header records the method, unit, sam
 
 Copyright (C) 2026 Raymond Turrisi, Massachusetts Institute of Technology
 
-Licensed under GPL-3.0-only. See [LICENSE](LICENSE).
+Licensed under GPL-3.0-only. See the LICENSE file.
 
 If you have been granted a license under the source-available "MIT Spurdog AUV" license, that license supersedes the GPL-3.0 license for your use of this software.

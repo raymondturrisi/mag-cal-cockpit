@@ -832,7 +832,7 @@ function handle(m){
     if(m.type==='wmm'){EMFI=m.emfi||m.emfi_ut*0.01||.5127;if(m.inclination_deg)INCL_DEG=m.inclination_deg;el('de').textContent=EMFI.toFixed(4)+(m.unit_label?' '+m.unit_label:'');
         if(m.lat!=null&&document.activeElement!==el('lat-in'))el('lat-in').value=m.lat.toFixed(4);if(m.lon!=null&&document.activeElement!==el('lon-in'))el('lon-in').value=m.lon.toFixed(4);
         if(m.error){el('dsrc').textContent='WMM error: '+m.error;el('dsrc').className='v r';}
-        else if(m.source){el('dsrc').textContent=m.source==='default'?'default (Boston) — set location':m.source;el('dsrc').className='v '+(m.source==='default'?'o':'g');}el('di').textContent=INCL_DEG.toFixed(2)+'°';el('dd').textContent=(m.declination_deg||0).toFixed(2)+'°';}
+        else if(m.source){el('dsrc').textContent=m.source==='default'?'default (Boston), set location':m.source;el('dsrc').className='v '+(m.source==='default'?'o':'g');}el('di').textContent=INCL_DEG.toFixed(2)+'°';el('dd').textContent=(m.declination_deg||0).toFixed(2)+'°';}
     if(m.type==='unit_changed'){
         EMFI=m.emfi;
         el('de').textContent=EMFI.toFixed(4)+' '+m.label;
