@@ -1,16 +1,9 @@
-#!/usr/bin/env python3
-"""
-MCC — Mag Cal Cockpit
-
-Usage:
-    mcc.py --udp-port 50100 [--mount-pitch 90]
-    mcc.py --inspect mcc_session_20260521.json
-"""
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 Raymond Turrisi, Massachusetts Institute of Technology
 
 import asyncio
 import json
 import argparse
-import subprocess
 import time
 import webbrowser
 from pathlib import Path
@@ -21,29 +14,33 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import uvicorn
+from wmmhr import wmmhr_calc
 
-# ---------------------------------------------------------------------------
-# Globals
-# ---------------------------------------------------------------------------
+from . import __version__
+from .protocol import SCHEMAS, detect
+
 clients: set[WebSocket] = set()
-mag_data: list = []          # [[mx,my,mz], ...] raw sensor frame
-mag_ts: list = []            # [ts, ...] epoch timestamps per sample
-rp_data: list = []           # [[roll,pitch,yaw], ...] radians
-full_rows: list = []         # full parsed dicts for CSV
+mag_data: list = []
+mag_ts: list = []
+rp_data: list = []
+full_rows: list = []
 logging_active = False
 gyro_threshold = 0.05
-lvm_result = None            # (hi, si, quality, calibrated) after calibrate
-last_cal_mask = None         # boolean mask of which samples were used in last calibration
-all_display_pts: list = []   # accumulated display points for reconnect
+lvm_result = None
+last_cal_mask = None
+all_display_pts: list = []
 
 emfi_ut = 51.1217
 inclination_deg = 66.231
 declination_deg = -13.7716
-mag_unit = 'gauss'  # 'gauss', 'ut', 'nt' — set by frontend
-cal_method = 'lm'   # 'lm' or 'lse' — set by frontend
+mag_unit = 'gauss'
+cal_method = 'lm'
+out_dir = Path.cwd()
+magcc_schema = 'auto'
+location = {'lat': 42.357, 'lon': -71.087, 'source': 'default'}
 
 UNIT_LABELS = {'gauss': 'Gauss', 'ut': 'µT', 'nt': 'nT'}
-UNIT_SCALE = {'gauss': 1e-2, 'ut': 1.0, 'nt': 1e3}  # multiply emfi_ut by this
+UNIT_SCALE = {'gauss': 1e-2, 'ut': 1.0, 'nt': 1e3}
 
 def get_emfi():
     return emfi_ut * UNIT_SCALE[mag_unit]
@@ -53,7 +50,6 @@ def get_unit_label():
 
 mount_config = {'mount_roll': 0.0, 'mount_pitch': 0.0, 'mount_yaw': 0.0}
 def make_hist_bins(*err_arrays):
-    """Compute histogram bins from data range, 2% bin width."""
     all_err = np.concatenate([e for e in err_arrays if len(e) > 0])
     lo = np.floor(np.min(all_err) / 2) * 2
     hi = np.ceil(np.max(all_err) / 2) * 2
@@ -61,12 +57,8 @@ def make_hist_bins(*err_arrays):
     centers = ((bins[:-1] + bins[1:]) / 2).tolist()
     return bins, centers
 
-# Boston inclination
 INCL_RAD = np.deg2rad(66 + 16/60 + 7/3600.0)
 
-# ---------------------------------------------------------------------------
-# Rotation helpers
-# ---------------------------------------------------------------------------
 def _rpy_matrix(roll, pitch, yaw):
     cr, sr = np.cos(roll), np.sin(roll)
     cp, sp = np.cos(pitch), np.sin(pitch)
@@ -82,35 +74,24 @@ def get_mount_inv():
     return _rpy_matrix(r, p, y).T
 
 def body_to_level(V, roll, pitch):
-    """Transform Nx3 body-frame vectors to level frame using roll/pitch arrays."""
     out = np.empty_like(V)
     cr, sr = np.cos(roll), np.sin(roll)
     cp, sp = np.cos(pitch), np.sin(pitch)
-    # Vectorized Ry(p) @ Rx(r) @ v
     x, y, z = V[:,0], V[:,1], V[:,2]
-    # Rx
     y1 = cr*y - sr*z
     z1 = sr*y + cr*z
-    # Ry
     out[:,0] = cp*x + sp*z1
     out[:,1] = y1
     out[:,2] = -sp*x + cp*z1
     return out
 
 def mag_heading_deg(M_level):
-    """Magnetic heading from level-frame mag: atan2(-My, Mx) in [0,360)."""
+    # atan2(-My, Mx), wrapped to [0, 360)
     h = np.degrees(np.arctan2(-M_level[:,1], M_level[:,0]))
     return np.mod(h + 360.0, 360.0)
 
-# ---------------------------------------------------------------------------
-# RLS Sphere Estimator
-# ---------------------------------------------------------------------------
 class RLSSphereEstimator:
-    """
-    Incremental RLS for sphere center fitting.
-    Model: 2*cx*mx + 2*cy*my + 2*cz*mz + d = mx^2+my^2+mz^2
-    theta = [2cx, 2cy, 2cz, d] where d = r^2 - |c|^2
-    """
+    # |m|^2 = 2c.m + d, theta = [2c, d], d = r^2 - |c|^2
     def __init__(self, forgetting=0.999):
         self.theta = np.zeros(4)
         self.P = np.eye(4) * 1000.0
@@ -146,9 +127,6 @@ class RLSSphereEstimator:
 
 rls = RLSSphereEstimator()
 
-# ---------------------------------------------------------------------------
-# Calibration
-# ---------------------------------------------------------------------------
 def _lse_init(data, ef, n_iter=3):
     X = data.copy()
     cum_hi = np.zeros(3)
@@ -182,7 +160,6 @@ def _lse_init(data, ef, n_iter=3):
 
 
 def emfi_pct(data, ef, thresholds=[1, 2, 5]):
-    """Percentage of points within ±threshold% of EMFI."""
     mags = np.linalg.norm(data, axis=1)
     result = {}
     for t in thresholds:
@@ -192,7 +169,6 @@ def emfi_pct(data, ef, thresholds=[1, 2, 5]):
 
 
 def calibrate_lse(mag_arr, ef, n_iter=5):
-    """LSE-only calibration (no nonlinear optimization)."""
     hi, si = _lse_init(mag_arr, ef, n_iter=n_iter)
     cal = (si @ (mag_arr - hi).T).T
     radii = np.linalg.norm(cal, axis=1)
@@ -227,9 +203,6 @@ def calibrate_lm(mag_arr, ef, max_iter=100):
          'raw_emfi_pct':raw_emfi, 'cal_emfi_pct':cal_emfi}
     return hi, si, q, cal
 
-# ---------------------------------------------------------------------------
-# File I/O
-# ---------------------------------------------------------------------------
 CSV_COLS = ['timestamp_s',
     'accel_x','accel_y','accel_z',
     'gyro_x','gyro_y','gyro_z',
@@ -252,15 +225,15 @@ def save_csv_log(rows, path, mask=None):
 def save_calibration(hi, si, quality, path, csv_path=None):
     with open(path, 'w') as f:
         f.write("# Magnetometer Calibration Parameters\n")
-        f.write("# Generated by mag_cal_cockpit v1\n")
+        f.write(f"# Generated by magcc v{__version__}\n")
         f.write(f"# Method: {cal_method.upper()}\n")
         f.write(f"# Sensor: generic\n")
-        f.write(f"# Units: Gauss\n")
+        f.write(f"# Units: {get_unit_label()}\n")
         if csv_path:
             f.write(f"# Raw data: {csv_path}\n")
         f.write(f"# Samples: {quality['n_samples']}\n")
-        f.write(f"# Mean radius: {quality['mean_radius']:.6f} Gauss\n")
-        f.write(f"# Std radius: {quality['std_radius']:.6f} Gauss\n")
+        f.write(f"# Mean radius: {quality['mean_radius']:.6f} {get_unit_label()}\n")
+        f.write(f"# Std radius: {quality['std_radius']:.6f} {get_unit_label()}\n")
         f.write(f"# Relative std: {quality['relative_std']:.4f}\n")
         f.write(f"# Expected field strength: {get_emfi():.6f} {get_unit_label()}\n")
         f.write("#\n")
@@ -271,11 +244,10 @@ def save_calibration(hi, si, quality, path, csv_path=None):
             f.write(f"# Within ±{t}% of EMFI: Raw {raw_pct[t]:.2f}% → Calibrated {cal_pct.get(t,0):.2f}%\n")
         f.write("\n")
         f.write(f"b = {hi[0]:.12f},{hi[1]:.12f},{hi[2]:.12f}\n")
-        f.write(f"# Note: Hard iron values in Gauss\n")
+        f.write(f"# Note: Hard iron values in {get_unit_label()}\n")
         f.write("A = " + ",".join(f"{x:.12f}" for x in si.flatten()) + "\n")
 
 def save_session(path, hi, si, quality, calibrated):
-    """Save full session state for --inspect reload."""
     session = {
         'mag_data': [list(m) for m in mag_data],
         'mag_ts': list(mag_ts),
@@ -292,6 +264,7 @@ def save_session(path, hi, si, quality, calibrated):
         'declination_deg': declination_deg,
         'mask': last_cal_mask.tolist() if last_cal_mask is not None else None,
         'mount_config': mount_config,
+        'location': {'lat': location['lat'], 'lon': location['lon']},
     }
     class NpEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -305,9 +278,8 @@ def save_session(path, hi, si, quality, calibrated):
 
 
 def load_session(path):
-    """Load session from JSON, populate all globals."""
     global mag_data, mag_ts, rp_data, full_rows, lvm_result, last_cal_mask
-    global cal_method, mag_unit, emfi_ut, inclination_deg, declination_deg, mount_config
+    global cal_method, mag_unit, emfi_ut, inclination_deg, declination_deg, mount_config, INCL_RAD
     with open(path) as f:
         s = json.load(f)
     mag_data[:] = s['mag_data']
@@ -319,6 +291,8 @@ def load_session(path):
     emfi_ut = s.get('emfi_ut', 51.1217)
     inclination_deg = s.get('inclination_deg', 66.231)
     declination_deg = s.get('declination_deg', -13.7716)
+    INCL_RAD = np.deg2rad(inclination_deg)
+    location.update(s.get('location', {}), source='session')
     mount_config.update(s.get('mount_config', {}))
 
     hi = np.array(s['hard_iron'])
@@ -328,7 +302,6 @@ def load_session(path):
     last_cal_mask = np.array(s['mask']) if s.get('mask') is not None else np.ones(len(mag_data), dtype=bool)
     lvm_result = (hi, si, quality, calibrated)
 
-    # Feed all data into RLS estimator
     rls.reset()
     for m in mag_data:
         rls.update(m[0], m[1], m[2])
@@ -336,47 +309,43 @@ def load_session(path):
     print(f"Session loaded: {path} ({len(mag_data)} samples, method={cal_method})")
 
 
-# ---------------------------------------------------------------------------
-# WMMHR
-# ---------------------------------------------------------------------------
-def get_wmm(lat, lon, alt=0.0):
-    global emfi_ut, inclination_deg, declination_deg, INCL_RAD
-    try:
-        r = subprocess.run(['wmmhr_cli', str(lat), str(lon), str(alt)],
-                           capture_output=True, text=True, timeout=5)
-        for line in r.stdout.splitlines():
-            if 'F  (Total Intensity)' in line:
-                emfi_ut = float(line.split(':')[1].split('µT')[0].strip())
-                pass  # emfi_ut updated, get_emfi() derives from it
-            elif 'Declination:' in line:
-                declination_deg = float(line.split(':')[1].split('±')[0].strip())
-            elif 'Inclination:' in line:
-                inclination_deg = float(line.split(':')[1].split('±')[0].strip())
-                INCL_RAD = np.deg2rad(inclination_deg)
-    except Exception:
-        pass
-    return {'emfi':get_emfi(),'emfi_ut':emfi_ut,
-            'inclination_deg':inclination_deg,'declination_deg':declination_deg}
+LOCATION_RANK = {'default': 0, 'browser': 1, 'session': 2, 'manual': 3, 'cli': 3}
 
-# ---------------------------------------------------------------------------
-# UDP — MCC protocol: |ts,ax,ay,az,gx,gy,gz,mx,my,mz,roll,pitch,yaw*
-# 13 fields, |/* delimited, sensor frame, units defined by broadcaster
-# ---------------------------------------------------------------------------
-def parse_mcc_packet(s):
-    s = s.strip()
-    if s.startswith('|'): s = s[1:]
-    if s.endswith('*'): s = s[:-1]
-    fields = s.split(',')
-    if len(fields) < 13: return None
-    try:
-        f = [float(x) for x in fields[:13]]
-    except ValueError:
-        return None
-    return {'ts':f[0],
-        'ax':f[1],'ay':f[2],'az':f[3],
-        'gx':f[4],'gy':f[5],'gz':f[6],
-        'mx':f[7],'my':f[8],'mz':f[9],
-        'filt_roll':f[10],'filt_pitch':f[11],'filt_yaw':f[12]}
+def get_wmm(lat, lon, source, alt_km=0.0):
+    global emfi_ut, inclination_deg, declination_deg, INCL_RAD
+    error = None
+    if LOCATION_RANK[source] >= LOCATION_RANK[location['source']]:
+        try:
+            lat, lon = float(lat), float(lon)
+            if not (-90 <= lat <= 90 and -180 <= lon <= 360):
+                raise ValueError(f'lat/lon out of range: {lat}, {lon}')
+            m = wmmhr_calc()
+            m.setup_env(lat, lon, alt_km, unit='km')
+            m.setup_time()
+            emfi_ut = float(m.get_Bf()[0]) / 1000.0  # nT -> uT
+            inclination_deg = float(m.get_Binc()[0])
+            declination_deg = float(m.get_Bdec()[0])
+            INCL_RAD = np.deg2rad(inclination_deg)
+            location.update(lat=lat, lon=lon, source=source)
+        except Exception as e:
+            error = str(e)
+            print(f"WMM error: {e}")
+    return wmm_state(error)
+
+def wmm_state(error=None):
+    return {'emfi':get_emfi(),'emfi_ut':emfi_ut,'unit_label':get_unit_label(),
+            'inclination_deg':inclination_deg,'declination_deg':declination_deg,
+            'lat':location['lat'],'lon':location['lon'],'source':location['source'],
+            'error':error}
+
+def parse_magcc_packet(s):
+    global magcc_schema
+    if magcc_schema == 'auto':
+        name = detect(s)
+        if name is None: return None
+        magcc_schema = name
+        print(f"magcc schema detected: {name}")
+    return SCHEMAS[magcc_schema](s)
 
 
 class UDPProtocol(asyncio.DatagramProtocol):
@@ -393,12 +362,7 @@ class UDPProtocol(asyncio.DatagramProtocol):
                 self.buf = self.buf[e+1:]
         except Exception: pass
 
-# ---------------------------------------------------------------------------
-# Compute diagnostic data for Tab 2
-# ---------------------------------------------------------------------------
 def compute_diagnostics(mag_arr, rp_arr, hi, si, lvm_hi=None, lvm_si=None):
-    """Compute level-frame data, headings, inclination/radius for diagnostics tab.
-    hi/si is the RLS estimate. lvm_hi/lvm_si is optional LVM result."""
     centered = mag_arr - hi
     cal = (si @ centered.T).T
 
@@ -406,7 +370,6 @@ def compute_diagnostics(mag_arr, rp_arr, hi, si, lvm_hi=None, lvm_si=None):
     raw_lvl = body_to_level(mag_arr, roll, pitch)
     cal_lvl = body_to_level(cal, roll, pitch)
 
-    # Inclination & radius helpers
     def incl_radius(lvl):
         xy = np.sqrt(lvl[:,0]**2 + lvl[:,1]**2)
         incl = np.degrees(np.arctan2(lvl[:,2], xy))
@@ -417,7 +380,6 @@ def compute_diagnostics(mag_arr, rp_arr, hi, si, lvm_hi=None, lvm_si=None):
     cal_incl, cal_radius = incl_radius(cal_lvl)
     ideal_incl = np.degrees(INCL_RAD)
 
-    # Downsample
     n = len(mag_arr)
     idx = np.arange(n)
     if n > 5000:
@@ -435,12 +397,10 @@ def compute_diagnostics(mag_arr, rp_arr, hi, si, lvm_hi=None, lvm_si=None):
         'ring_r': float(get_emfi() * np.cos(INCL_RAD)),
         'ring_z': float(get_emfi() * np.sin(INCL_RAD)),
         'ideal_incl': float(ideal_incl),
-        # 3D level-frame points for animation ring view
         'raw_lvl_3d': [raw_lvl[idx,0].tolist(), raw_lvl[idx,1].tolist(), raw_lvl[idx,2].tolist()],
         'rls_lvl_3d': [cal_lvl[idx,0].tolist(), cal_lvl[idx,1].tolist(), cal_lvl[idx,2].tolist()],
     }
 
-    # LVM level-frame if available
     if lvm_hi is not None and lvm_si is not None:
         lvm_cal = (lvm_si @ (mag_arr - lvm_hi).T).T
         lvm_lvl = body_to_level(lvm_cal, roll, pitch)
@@ -452,9 +412,6 @@ def compute_diagnostics(mag_arr, rp_arr, hi, si, lvm_hi=None, lvm_si=None):
 
     return result
 
-# ---------------------------------------------------------------------------
-# Broadcast
-# ---------------------------------------------------------------------------
 async def bcast(obj):
     global clients
     if not clients: return
@@ -465,12 +422,9 @@ async def bcast(obj):
         except Exception: dead.add(ws)
     clients -= dead
 
-# ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
 app = FastAPI()
 
-static_dir = Path(__file__).parent
+static_dir = Path(__file__).parent / 'web'
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.get("/")
@@ -484,11 +438,11 @@ async def ws_endpoint(websocket: WebSocket):
     has_mount = any(mount_config[k] != 0 for k in mount_config)
     await websocket.send_text(json.dumps({'type':'config', **mount_config, 'has_mount':has_mount,
         'emfi':get_emfi(), 'unit':mag_unit, 'unit_label':get_unit_label()}))
-    # Send accumulated points on reconnect
+    await websocket.send_text(json.dumps({'type':'wmm', **wmm_state()}))
     if all_display_pts:
         await websocket.send_text(json.dumps({'type':'points','points':all_display_pts,
                                               'n_logged':len(mag_data),'logging':logging_active}))
-    # If calibration exists (inspect mode or post-calibrate), re-run calibrate to populate all tabs
+    # Re-runs on all samples so a reconnecting page gets every tab populated; region filters are not kept
     if lvm_result is not None:
         await handle_msg(websocket, json.dumps({'cmd':'calibrate'}))
     try:
@@ -533,8 +487,7 @@ async def handle_msg(ws, message):
             await bcast({'type':'cal_result','error':'Need at least 50 samples'})
             return
 
-        # Region filtering: list of {start_t, end_t} relative to first sample
-        regions = msg.get('regions')  # None = use all data
+        regions = msg.get('regions')
         ts_arr = np.array(mag_ts)
         t0 = ts_arr[0] if len(ts_arr) > 0 else 0
         ts_rel = ts_arr - t0
@@ -546,7 +499,6 @@ async def handle_msg(ws, message):
         else:
             mask = np.ones(len(mag_data), dtype=bool)
 
-        # Roll/pitch magnitude filter
         rp_filter = msg.get('rp_filter')
         if rp_filter:
             all_rp = np.array(rp_data)
@@ -570,13 +522,11 @@ async def handle_msg(ws, message):
             lvm_result = (hi, si, quality, calibrated)
             last_cal_mask = mask
 
-            # Histograms
             raw_r = np.linalg.norm(arr, axis=1)
             cal_r = np.linalg.norm(calibrated, axis=1)
             raw_err = (raw_r - get_emfi())/get_emfi()*100
             cal_err = (cal_r - get_emfi())/get_emfi()*100
 
-            # Downsample for display (max 5000)
             disp_idx = np.arange(len(arr))
             if len(arr) > 5000:
                 disp_idx = np.linspace(0, len(arr)-1, 5000, dtype=int)
@@ -587,7 +537,6 @@ async def handle_msg(ws, message):
             raw_disp = arr[disp_idx]
             cal_disp = calibrated[disp_idx]
 
-            # LSE intermediate for animation (raw→LSE→LM)
             lse_disp = None
             if cal_method == 'lm':
                 lse_hi, lse_si = _lse_init(arr, get_emfi())
@@ -600,11 +549,9 @@ async def handle_msg(ws, message):
                 if lse_disp is not None:
                     lse_disp = (R_inv @ lse_disp.T).T
 
-            # Diagnostics
             rls_hi_tmp, rls_si_tmp = rls.get_hard_soft(get_emfi())
             diag = compute_diagnostics(arr, rp_arr, rls_hi_tmp, rls_si_tmp, lvm_hi=hi, lvm_si=si)
 
-            # LSE level-frame ring for animation
             if lse_disp is not None:
                 lse_hi_anim, lse_si_anim = _lse_init(arr, get_emfi())
                 lse_cal_all = (lse_si_anim @ (arr - lse_hi_anim).T).T
@@ -614,12 +561,10 @@ async def handle_msg(ws, message):
                     diag_idx = np.linspace(0, len(arr)-1, 5000, dtype=int)
                 diag['lse_lvl_3d'] = [lse_lvl[diag_idx,0].tolist(), lse_lvl[diag_idx,1].tolist(), lse_lvl[diag_idx,2].tolist()]
 
-            # RLS for comparison histogram
             rls_cal = (rls_si_tmp @ (arr - rls_hi_tmp).T).T
             rls_r = np.linalg.norm(rls_cal, axis=1)
             rls_err = (rls_r - get_emfi())/get_emfi()*100
 
-            # LM MFI on ALL data (not just filtered) for time-series plot
             all_arr = np.array(mag_data)
             all_lm_cal = (si @ (all_arr - hi).T).T
             all_lm_r = np.linalg.norm(all_lm_cal, axis=1)
@@ -629,7 +574,6 @@ async def handle_msg(ws, message):
             if len(mfi_idx2) > 2000:
                 mfi_idx2 = np.linspace(0, len(all_ts)-1, 2000, dtype=int)
 
-            # Per-point metadata for precision inspection (same disp_idx)
             ts_filt = np.array(mag_ts)[mask]
             t0_filt = ts_filt[0] if len(ts_filt) > 0 else 0
             pt_meta = {
@@ -668,11 +612,11 @@ async def handle_msg(ws, message):
         try:
             hi, si, quality, cal = lvm_result
             ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-            export_dir = Path(__file__).parent / f'mcc_{ts}'
-            export_dir.mkdir(exist_ok=True)
-            csv_file = export_dir / 'mcc_raw.csv'
+            export_dir = out_dir / f'magcc_{ts}'
+            export_dir.mkdir(parents=True, exist_ok=True)
+            csv_file = export_dir / 'magcc_raw.csv'
             dat_file = export_dir / 'mag_cal.dat'
-            session_file = export_dir / 'mcc_session.json'
+            session_file = export_dir / 'magcc_session.json'
             save_csv_log(full_rows, csv_file, mask=last_cal_mask)
             save_calibration(hi, si, quality, dat_file, csv_path=str(csv_file))
             save_session(session_file, hi, si, quality, cal)
@@ -682,7 +626,12 @@ async def handle_msg(ws, message):
             await bcast({'type':'export_result','error':str(e)})
 
     elif cmd == 'geolocation':
-        result = get_wmm(msg.get('lat',42.357), msg.get('lon',-71.087))
+        source = msg.get('source', 'browser')
+        if source not in ('browser', 'manual', 'default'): return
+        if source == 'default':
+            result = get_wmm(location['lat'], location['lon'], 'default')
+        else:
+            result = get_wmm(msg.get('lat'), msg.get('lon'), source)
         await bcast({'type':'wmm', **result})
 
     elif cmd == 'set_gyro_threshold':
@@ -701,9 +650,6 @@ async def handle_msg(ws, message):
             await bcast({'type':'unit_changed','unit':mag_unit,'label':get_unit_label(),'emfi':get_emfi()})
 
 
-# ---------------------------------------------------------------------------
-# Packet processor
-# ---------------------------------------------------------------------------
 async def process_packets(packet_queue):
     global mag_data, rp_data, full_rows, all_display_pts
     last_update = time.time()
@@ -724,7 +670,7 @@ async def process_packets(packet_queue):
                 pending = []
             continue
 
-        parsed = parse_mcc_packet(sentence)
+        parsed = parse_magcc_packet(sentence)
         if parsed is None: continue
 
         mx, my, mz = parsed['mx'], parsed['my'], parsed['mz']
@@ -732,7 +678,6 @@ async def process_packets(packet_queue):
         gyro_mag = float(np.sqrt(gx**2 + gy**2 + gz**2))
         in_motion = gyro_mag > gyro_threshold
 
-        # EMFI % error for coloring
         mag_norm = float(np.sqrt(mx**2 + my**2 + mz**2))
         emfi_err = (mag_norm - get_emfi()) / get_emfi() * 100 if get_emfi() > 0 else 0
 
@@ -760,7 +705,6 @@ async def process_packets(packet_queue):
                          'n_logged':len(mag_data),'logging':logging_active})
             pending = []
 
-        # RLS display at 1 Hz
         if now - last_rls >= 1.0 and rls.n >= 20:
             last_rls = now
             try:
@@ -781,17 +725,14 @@ async def process_packets(packet_queue):
                 if has_mount:
                     cal_disp = (R_inv @ cal_disp.T).T
 
-                # Compute diagnostics for tab 2, include LVM if available
                 lvm_hi_d = lvm_result[0] if lvm_result else None
                 lvm_si_d = lvm_result[1] if lvm_result else None
                 diag = compute_diagnostics(arr, rp_arr, hi, si, lvm_hi=lvm_hi_d, lvm_si=lvm_si_d)
 
-                # MFI time-series (downsample to max 2000 for transport)
                 ts_arr = np.array(mag_ts)
                 mfi_idx = np.arange(len(ts_arr))
                 if len(mfi_idx) > 2000:
                     mfi_idx = np.linspace(0, len(ts_arr)-1, 2000, dtype=int)
-                # Relative time from first sample
                 t0 = ts_arr[0] if len(ts_arr) > 0 else 0
                 mfi_t = (ts_arr[mfi_idx] - t0).tolist()
                 mfi_raw = raw_r[mfi_idx].tolist()
@@ -814,7 +755,6 @@ async def process_packets(packet_queue):
                     'mfi_t':mfi_t, 'mfi_raw':mfi_raw, 'mfi_rls':mfi_rls, 'mfi_roll':mfi_roll, 'mfi_pitch':mfi_pitch,
                     'ts_range':[float(t0), float(ts_arr[-1])] if len(ts_arr)>0 else [0,0],
                 }
-                # Include LVM histogram if we have a calibration result
                 if lvm_result is not None:
                     lvm_hi, lvm_si, _, _ = lvm_result
                     lvm_cal = (lvm_si @ (arr - lvm_hi).T).T
@@ -826,11 +766,9 @@ async def process_packets(packet_queue):
                 print(f"RLS error: {e}")
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 def main():
-    p = argparse.ArgumentParser(description='MCC — Mag Cal Cockpit')
+    p = argparse.ArgumentParser(prog='magcc', description='magcc — Mag Cal Cockpit')
+    p.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
     p.add_argument('--udp-port', type=int, default=50100)
     p.add_argument('--udp-addr', default='0.0.0.0')
     p.add_argument('--web-port', type=int, default=8080)
@@ -839,20 +777,32 @@ def main():
     p.add_argument('--mount-pitch', type=float, default=0.0)
     p.add_argument('--mount-yaw', type=float, default=0.0)
     p.add_argument('--inspect', type=str, default=None, help='Load session JSON for offline inspection')
+    p.add_argument('--out-dir', type=str, default='.', help='Directory for magcc_<timestamp>/ exports (default: cwd)')
+    p.add_argument('--magcc', choices=['auto', *SCHEMAS], default='auto', help='magcc packet schema (default: auto-detect)')
+    p.add_argument('--lat', type=float, default=None, help='Latitude for WMMHR; overrides browser location')
+    p.add_argument('--lon', type=float, default=None, help='Longitude for WMMHR; overrides browser location')
     args = p.parse_args()
+    if (args.lat is None) != (args.lon is None):
+        p.error('--lat and --lon must be given together')
 
-    global mount_config
+    global mount_config, out_dir, magcc_schema
     mount_config = {'mount_roll':args.mount_roll,'mount_pitch':args.mount_pitch,'mount_yaw':args.mount_yaw}
+
+    out_dir = Path(args.out_dir).expanduser().resolve()
+    magcc_schema = args.magcc
 
     inspect_mode = args.inspect is not None
 
     if inspect_mode:
         load_session(args.inspect)
-        # Override mount config from session if not explicitly set on CLI
         if args.mount_roll == 0 and args.mount_pitch == 0 and args.mount_yaw == 0:
-            pass  # use session's mount_config (already loaded)
+            pass
         else:
             mount_config = {'mount_roll':args.mount_roll,'mount_pitch':args.mount_pitch,'mount_yaw':args.mount_yaw}
+
+    if args.lat is not None:
+        r = get_wmm(args.lat, args.lon, 'cli')
+        if r['error']: p.error(f"WMMHR failed for --lat/--lon: {r['error']}")
 
     packet_queue = asyncio.Queue(maxsize=2000)
 
@@ -868,7 +818,8 @@ def main():
         if not args.no_browser:
             webbrowser.open(f'http://localhost:{args.web_port}')
 
-    print(f"MCC — Mag Cal Cockpit on http://localhost:{args.web_port}")
+    print(f"magcc — Mag Cal Cockpit v{__version__} on http://localhost:{args.web_port}")
+    print(f"Exports: {out_dir}")
     if inspect_mode:
         print(f"Inspect mode: {args.inspect}")
     uvicorn.run(app, host='0.0.0.0', port=args.web_port, log_level='warning')
