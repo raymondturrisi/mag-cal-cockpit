@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "magcc"
+dynamic = ["version"]
+description = "Live magnetometer hard/soft-iron calibration with a browser cockpit, fed by a simple UDP protocol"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Raymond Turrisi", email = "rturrisi@mit.edu" }]
+keywords = ["magnetometer", "calibration", "hard iron", "soft iron", "imu", "wmm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "fastapi",
+    "uvicorn[standard]",
+    "wmmhr",
+]
+
+[project.scripts]
+magcc = "magcc.magcc:main"
+magcc-replay = "magcc.replay:main"
+
+[project.urls]
+Repository = "https://github.com/raymondturrisi/mag-cal-cockpit"
+
+[tool.hatch.version]
+path = "src/magcc/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/magcc"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/magcc", "README.md", "LICENSE", "pyproject.toml"]

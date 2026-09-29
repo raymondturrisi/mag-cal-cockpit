@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# magcc exports (mcc_* are pre-rename exports)
+magcc_*/
+mcc_*/
+mag_cal.dat
